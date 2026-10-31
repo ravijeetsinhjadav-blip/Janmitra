@@ -453,12 +453,20 @@ Includes 5 seed schemes with authentic nodal links, verified supporting document
 - **IDOR Protection:** All vault endpoints verify authenticated citizen ownership using the JWT Bearer token claims.
 
 ### 11.2 Google Cloud Vision OCR & Intelligent Extraction
-- **Production Integration:** Uses `google-cloud-vision` (`vision.ImageAnnotatorClient`) for document text and layout recognition when credentials are provided.
-- **Development / Mock Mode:** High-fidelity simulated extraction generating authentic text for Indian government documents (Income Certificate, Caste Certificate, Domicile, NFSA Ration Card, Aadhaar Card, Land Records).
+- **Production Integration:** Uses `google-cloud-vision` (`vision.ImageAnnotatorClient`) for document text and layout recognition when credentials are provided:
+  - Supports image files (`JPEG`, `PNG`) using `document_text_detection`.
+  - Supports PDFs up to 5 pages synchronously using in-memory bytes via `batch_annotate_files` (eliminating Cloud Storage bucket dependencies for standard documents). Multi-page PDFs beyond 5 pages require asynchronous Cloud Storage batching.
+- **Production Safety:** `MockOCRAdapter` is strictly forbidden from running in production (`ENVIRONMENT == 'production'` or `DEBUG is False`). Missing Cloud Vision credentials in production immediately transition status to `OCR_FAILED` with an explicit notice and `manual_review_required = True`.
+- **Development / Mock Mode:** High-fidelity simulated extraction generating authentic text for Indian government documents (Income Certificate, Caste Certificate, Domicile, NFSA Ration Card, Aadhaar Card, Land Records). Mock metadata is tagged with `is_mock: True`.
 - **Confidence Scoring & Manual Review:**
   - Computes weighted extraction confidence score (0.0 to 1.0).
   - Scores below threshold (0.70) or blurred/unreadable scans automatically set `ocr_status = MANUAL_REVIEW_REQUIRED` and flag `manual_review_required = True`.
-- **Retry Processing:** Citizens can re-trigger OCR extraction on any uploaded document.
+- **Sensitive Data & Header Protection:**
+  - Full OCR text is completely excluded from application log streams.
+  - OCR failure error messages sanitize local system paths (`C:\Users\...`).
+  - Downloads use sanitized headers with `X-Content-Type-Options: nosniff` and strip CRLF/quotes to prevent HTTP response splitting.
+- **Retry Processing:** Citizens can re-trigger OCR extraction on any uploaded document (`POST /api/v1/documents/{id}/retry-ocr`). Rejects duplicate requests with `409 Conflict` if processing is already underway.
+- **Terminology & Governance:** Clearly distinguishes *Document Uploaded*, *OCR Completed / Text Extracted*, *Manual Review Required*, and *Official Government Verification*. OCR completion verifies machine text extraction only and never guarantees authenticity or government eligibility.
 
 ### 11.3 Phase 5 API Endpoint Reference
 

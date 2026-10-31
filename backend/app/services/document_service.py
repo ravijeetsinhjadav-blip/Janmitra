@@ -8,7 +8,7 @@ from app.models.document import DocumentMetadata, DocumentProcessingStatus
 from app.models.scheme import Scheme
 from app.models.user import User
 from app.services.storage_service import storage_service
-from app.services.ocr_service import ocr_service
+from app.services.ocr_service import ocr_service, sanitize_ocr_error_message, OCRResult
 from app.schemas.document import (
     DocumentMetadataResponse,
     DocumentListResponse,
@@ -70,8 +70,16 @@ class DocumentService:
                 filename=sanitized_filename,
             )
         except Exception as exc:
-            logger.error("OCR service exception: %s", exc)
-            ocr_result = None
+            safe_msg = sanitize_ocr_error_message(str(exc))
+            logger.error("OCR service exception: %s", safe_msg)
+            ocr_result = OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"error": safe_msg},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"OCR execution failure: {safe_msg}",
+            )
 
         # Create DocumentMetadata record
         doc_record = DocumentMetadata(
@@ -90,6 +98,7 @@ class DocumentService:
             manual_review_required=ocr_result.manual_review_required if ocr_result else True,
             ocr_error_message=ocr_result.error_message if ocr_result else "OCR execution failure",
         )
+
 
         try:
             db.add(doc_record)
@@ -148,6 +157,11 @@ class DocumentService:
         return doc
 
     @staticmethod
+    def sanitize_header_filename(filename: str) -> str:
+        """Sanitize filename to prevent header injection."""
+        return storage_service.sanitize_header_filename(filename)
+
+    @staticmethod
     def get_document_file(
         db: Session,
         document_id: uuid.UUID,
@@ -169,8 +183,16 @@ class DocumentService:
         storage_ref = doc.storage_reference
 
         # Remove from database
-        db.delete(doc)
-        db.commit()
+        try:
+            db.delete(doc)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.error("Failed to delete document metadata from database: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database error occurred while deleting document record.",
+            )
 
         # Remove binary file from disk
         storage_service.delete_file(storage_ref)
@@ -184,6 +206,14 @@ class DocumentService:
     ) -> DocumentMetadata:
         """Re-run OCR extraction on an existing document."""
         doc = DocumentService.get_document_by_id(db, document_id, user)
+
+        # Prevent duplicate concurrent processing
+        if doc.ocr_status == DocumentProcessingStatus.PROCESSING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="OCR extraction is already currently processing for this document.",
+            )
+
         file_bytes = storage_service.get_file_bytes(doc.storage_reference)
 
         # Update status to processing
@@ -209,6 +239,7 @@ class DocumentService:
         db.commit()
         db.refresh(doc)
         return doc
+
 
     @staticmethod
     def get_scheme_document_checklist(
@@ -283,3 +314,4 @@ class DocumentService:
 
 
 document_service = DocumentService()
+

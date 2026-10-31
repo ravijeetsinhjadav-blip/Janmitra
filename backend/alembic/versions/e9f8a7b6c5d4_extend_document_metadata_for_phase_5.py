@@ -66,3 +66,4 @@ def downgrade() -> None:
     op.drop_column('document_metadata', 'ocr_extracted_text')
     op.drop_index(op.f('ix_document_metadata_ocr_status'), table_name='document_metadata')
     op.drop_column('document_metadata', 'ocr_status')
+

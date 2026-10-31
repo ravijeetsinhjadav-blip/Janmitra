@@ -33,9 +33,10 @@ void main() {
       expect(doc.id, '11111111-2222-3333-4444-555555555555');
       expect(doc.displayType, 'Income Certificate');
       expect(doc.formattedFileSize, '1.00 MB');
-      expect(doc.statusBadgeText, 'OCR Verified');
+      expect(doc.statusBadgeText, 'OCR Completed');
       expect(doc.manualReviewRequired, isFalse);
       expect(doc.ocrConfidence, 0.945);
+
 
       final exportedJson = doc.toJson();
       expect(exportedJson['document_type'], 'income_certificate');
@@ -100,7 +101,8 @@ void main() {
   });
 
   group('DocumentDetailScreen Widget Tests', () {
-    testWidgets('Renders document details, confidence bar, and extracted text', (WidgetTester tester) async {
+    testWidgets('Renders document details, confidence bar, and extracted text',
+        (WidgetTester tester) async {
       final doc = DocumentMetadataModel(
         id: '123',
         userId: 'u1',
@@ -112,7 +114,8 @@ void main() {
         uploadStatus: 'uploaded',
         ocrStatus: DocumentProcessingStatus.ocrCompleted,
         ocrConfidence: 0.94,
-        ocrExtractedText: 'ANNUAL FAMILY INCOME: INR 1,20,000 CERTIFIED BY TAHSILDAR',
+        ocrExtractedText:
+            'ANNUAL FAMILY INCOME: INR 1,20,000 CERTIFIED BY TAHSILDAR',
         ocrMetadata: {'provider': 'mock_ocr', 'word_count': 12},
         manualReviewRequired: false,
         createdAt: DateTime(2026, 10, 31),
@@ -127,15 +130,17 @@ void main() {
 
       expect(find.text('Income Certificate'), findsWidgets);
       expect(find.text('annual_income_2026.pdf'), findsOneWidget);
-      expect(find.text('OCR Verified'), findsOneWidget);
+      expect(find.text('OCR Completed'), findsOneWidget);
       expect(find.text('Extraction Confidence'), findsOneWidget);
+
       expect(find.text('94%'), findsOneWidget);
       expect(find.text('Extracted Text'), findsOneWidget);
       expect(find.textContaining('ANNUAL FAMILY INCOME'), findsOneWidget);
       expect(find.text('Retry OCR Processing'), findsOneWidget);
     });
 
-    testWidgets('Renders warning banner when manualReviewRequired is true', (WidgetTester tester) async {
+    testWidgets('Renders warning banner when manualReviewRequired is true',
+        (WidgetTester tester) async {
       final docReview = DocumentMetadataModel(
         id: '456',
         userId: 'u1',
@@ -149,7 +154,8 @@ void main() {
         ocrConfidence: 0.50,
         ocrExtractedText: 'Partial text [Unreadable]',
         manualReviewRequired: true,
-        ocrErrorMessage: 'Low extraction confidence detected. Review the document text carefully.',
+        ocrErrorMessage:
+            'Low extraction confidence detected. Review the document text carefully.',
         createdAt: DateTime(2026, 10, 31),
         updatedAt: DateTime(2026, 10, 31),
       );
@@ -161,12 +167,15 @@ void main() {
       );
 
       expect(find.text('Review Needed'), findsOneWidget);
-      expect(find.textContaining('Low extraction confidence detected'), findsOneWidget);
+      expect(find.textContaining('Low extraction confidence detected'),
+          findsOneWidget);
     });
   });
 
   group('UploadDocumentDialog Widget Tests', () {
-    testWidgets('Renders upload dialog options and document classification dropdown', (WidgetTester tester) async {
+    testWidgets(
+        'Renders upload dialog options and document classification dropdown',
+        (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -187,7 +196,8 @@ void main() {
   });
 
   group('DocumentVaultScreen Widget Tests', () {
-    testWidgets('Renders vault title, summary counters, and upload FAB', (WidgetTester tester) async {
+    testWidgets('Renders vault title, summary counters, and upload FAB',
+        (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: DocumentVaultScreen(),
@@ -197,11 +207,11 @@ void main() {
 
       expect(find.text('Citizen Document Vault'), findsOneWidget);
       expect(find.text('Total Files'), findsOneWidget);
-      expect(find.text('OCR Verified'), findsOneWidget);
+      expect(find.text('OCR Completed'), findsOneWidget);
       expect(find.text('Review Needed'), findsOneWidget);
+
       expect(find.text('All Documents'), findsOneWidget);
       expect(find.text('Upload Document'), findsOneWidget);
     });
   });
-
 }

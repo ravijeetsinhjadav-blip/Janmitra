@@ -125,6 +125,18 @@ class StorageService:
         clean = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean)
         return clean or "document"
 
+    def sanitize_header_filename(self, filename: str) -> str:
+        """Sanitize filename specifically for use in HTTP Content-Disposition headers.
+        
+        Prevents HTTP Response Splitting, CRLF injection, and quote escape attacks.
+        """
+        # Strip path traversal and quotes/CRLF
+        clean = Path(filename).name
+        clean = re.sub(r'[\r\n\t"\';]', '', clean)
+        clean = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean)
+        return clean or "document"
+
+
     def save_file(
         self,
         user_id: uuid.UUID,
@@ -188,3 +200,4 @@ class StorageService:
 
 
 storage_service = StorageService()
+

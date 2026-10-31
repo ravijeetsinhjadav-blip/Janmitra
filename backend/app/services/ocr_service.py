@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
@@ -9,6 +10,19 @@ from app.core.config import settings
 from app.models.document import DocumentProcessingStatus
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_ocr_error_message(msg: str) -> str:
+    """Strip internal server filesystem paths, hostnames, and credentials from error messages."""
+    if not msg:
+        return "OCR extraction encountered an error."
+    # Strip Windows drive and folder paths (e.g., C:\Users\... or D:\Janmitra\...)
+    clean = re.sub(r'[A-Za-z]:\\[\w\\\.\-]+', '[LOCAL_PATH]', msg)
+    # Strip Unix paths (/home/..., /var/..., etc.)
+    clean = re.sub(r'/(?:[\w\.\-]+/)+[\w\.\-]+', '[LOCAL_PATH]', clean)
+    # Strip GCP project IDs or email addresses if present
+    clean = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', '[REDACTED_IDENTITY]', clean)
+    return clean.strip()
 
 
 @dataclass
@@ -36,7 +50,12 @@ class BaseOCRAdapter:
 
 
 class GoogleCloudVisionAdapter(BaseOCRAdapter):
-    """Production adapter using Google Cloud Vision API."""
+    """Production adapter using Google Cloud Vision API.
+    
+    Supports:
+    1. Images (JPEG, PNG): Synchronous `document_text_detection`.
+    2. PDFs: Synchronous `batch_annotate_files` (up to 5 pages, no GCS required).
+    """
 
     def __init__(self, credentials_path: Optional[str] = None):
         self.credentials_path = credentials_path or settings.GOOGLE_APPLICATION_CREDENTIALS
@@ -48,9 +67,178 @@ class GoogleCloudVisionAdapter(BaseOCRAdapter):
             if self.credentials_path and os.path.exists(self.credentials_path):
                 self._client = vision.ImageAnnotatorClient.from_service_account_json(self.credentials_path)
             else:
-                # Default application credentials from environment
                 self._client = vision.ImageAnnotatorClient()
         return self._client
+
+    def _extract_from_image(self, client, file_bytes: bytes, now: datetime) -> OCRResult:
+        from google.cloud import vision
+        image = vision.Image(content=file_bytes)
+        response = client.document_text_detection(image=image)
+
+        if response.error.message:
+            clean_err = sanitize_ocr_error_message(response.error.message)
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "error": clean_err},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"Google Cloud Vision API error: {clean_err}",
+                completed_at=now,
+            )
+
+        full_text = response.full_text_annotation.text if response.full_text_annotation else ""
+        confidences: List[float] = []
+        detected_languages: List[str] = []
+        block_count = 0
+        word_count = 0
+
+        if response.full_text_annotation and response.full_text_annotation.pages:
+            for page in response.full_text_annotation.pages:
+                for lang in page.property.detected_languages:
+                    if lang.language_code not in detected_languages:
+                        detected_languages.append(lang.language_code)
+                for block in page.blocks:
+                    block_count += 1
+                    if block.confidence > 0:
+                        confidences.append(block.confidence)
+                    for para in block.paragraphs:
+                        for word in para.words:
+                            word_count += 1
+                            if word.confidence > 0:
+                                confidences.append(word.confidence)
+
+        avg_confidence = (sum(confidences) / len(confidences)) if confidences else (0.90 if full_text.strip() else 0.0)
+        avg_confidence = round(float(avg_confidence), 4)
+
+        is_low_confidence = avg_confidence < settings.OCR_CONFIDENCE_THRESHOLD
+        is_empty = len(full_text.strip()) < 10
+        manual_review = is_low_confidence or is_empty
+
+        status = (
+            DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED
+            if manual_review
+            else DocumentProcessingStatus.OCR_COMPLETED
+        )
+
+        metadata = {
+            "provider": "google_cloud_vision",
+            "is_mock": False,
+            "detected_languages": detected_languages or ["en"],
+            "block_count": block_count,
+            "word_count": word_count,
+            "confidence_threshold": settings.OCR_CONFIDENCE_THRESHOLD,
+            "pages": len(response.full_text_annotation.pages) if response.full_text_annotation else 1,
+        }
+
+        return OCRResult(
+            extracted_text=full_text,
+            confidence=avg_confidence,
+            metadata=metadata,
+            status=status,
+            manual_review_required=manual_review,
+            error_message="Low OCR extraction confidence or unreadable text." if manual_review else None,
+            completed_at=now,
+        )
+
+    def _extract_from_pdf(self, client, file_bytes: bytes, now: datetime) -> OCRResult:
+        from google.cloud import vision
+        # Synchronous batch file annotation for PDF files (up to 5 pages, in-memory)
+        input_config = vision.InputConfig(
+            content=file_bytes,
+            mime_type="application/pdf",
+        )
+        feature = vision.Feature(type_=vision.Feature.Type.DOCUMENT_TEXT_DETECTION)
+        request = vision.AnnotateFileRequest(
+            input_config=input_config,
+            features=[feature],
+            pages=[1, 2, 3, 4, 5],
+        )
+
+        response = client.batch_annotate_files(requests=[request])
+        if not response.responses:
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "Empty response from Vision API"},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message="Vision API returned empty response for PDF file.",
+                completed_at=now,
+            )
+
+        file_response = response.responses[0]
+        if file_response.error.message:
+            clean_err = sanitize_ocr_error_message(file_response.error.message)
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "error": clean_err},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"Google Cloud Vision PDF error: {clean_err}",
+                completed_at=now,
+            )
+
+        extracted_pages_text: List[str] = []
+        confidences: List[float] = []
+        detected_languages: List[str] = []
+        total_blocks = 0
+        total_words = 0
+
+        for page_resp in file_response.responses:
+            if page_resp.error.message:
+                continue
+            if page_resp.full_text_annotation:
+                extracted_pages_text.append(page_resp.full_text_annotation.text)
+                for page in page_resp.full_text_annotation.pages:
+                    for lang in page.property.detected_languages:
+                        if lang.language_code not in detected_languages:
+                            detected_languages.append(lang.language_code)
+                    for block in page.blocks:
+                        total_blocks += 1
+                        if block.confidence > 0:
+                            confidences.append(block.confidence)
+                        for para in block.paragraphs:
+                            for word in para.words:
+                                total_words += 1
+                                if word.confidence > 0:
+                                    confidences.append(word.confidence)
+
+        full_text = "\n\n--- Page Break ---\n\n".join(extracted_pages_text).strip()
+        avg_confidence = (sum(confidences) / len(confidences)) if confidences else (0.90 if full_text else 0.0)
+        avg_confidence = round(float(avg_confidence), 4)
+
+        is_low_confidence = avg_confidence < settings.OCR_CONFIDENCE_THRESHOLD
+        is_empty = len(full_text.strip()) < 10
+        manual_review = is_low_confidence or is_empty
+
+        status = (
+            DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED
+            if manual_review
+            else DocumentProcessingStatus.OCR_COMPLETED
+        )
+
+        metadata = {
+            "provider": "google_cloud_vision",
+            "is_mock": False,
+            "detected_languages": detected_languages or ["en"],
+            "block_count": total_blocks,
+            "word_count": total_words,
+            "confidence_threshold": settings.OCR_CONFIDENCE_THRESHOLD,
+            "pages": len(file_response.responses),
+            "note": "Processed via synchronous batch_annotate_files (first 5 pages). Multi-page PDFs exceeding 5 pages require GCS bucket async pipeline.",
+        }
+
+        return OCRResult(
+            extracted_text=full_text,
+            confidence=avg_confidence,
+            metadata=metadata,
+            status=status,
+            manual_review_required=manual_review,
+            error_message="Low OCR extraction confidence or unreadable PDF text." if manual_review else None,
+            completed_at=now,
+        )
 
     def extract_text(
         self,
@@ -61,97 +249,29 @@ class GoogleCloudVisionAdapter(BaseOCRAdapter):
     ) -> OCRResult:
         now = datetime.now(timezone.utc)
         try:
-            from google.cloud import vision
             client = self._get_client()
-
-            image = vision.Image(content=file_bytes)
-            # Use document_text_detection for high accuracy on structured government certificates
-            response = client.document_text_detection(image=image)
-
-            if response.error.message:
-                return OCRResult(
-                    extracted_text="",
-                    confidence=0.0,
-                    metadata={"provider": "google_cloud_vision", "error": response.error.message},
-                    status=DocumentProcessingStatus.OCR_FAILED,
-                    manual_review_required=True,
-                    error_message=f"Google Cloud Vision API error: {response.error.message}",
-                    completed_at=now,
-                )
-
-            full_text = response.full_text_annotation.text if response.full_text_annotation else ""
-
-            # Calculate average confidence across detected symbols/blocks
-            confidences: List[float] = []
-            detected_languages: List[str] = []
-            block_count = 0
-            word_count = 0
-
-            if response.full_text_annotation and response.full_text_annotation.pages:
-                for page in response.full_text_annotation.pages:
-                    for lang in page.property.detected_languages:
-                        if lang.language_code not in detected_languages:
-                            detected_languages.append(lang.language_code)
-                    for block in page.blocks:
-                        block_count += 1
-                        if block.confidence > 0:
-                            confidences.append(block.confidence)
-                        for para in block.paragraphs:
-                            for word in para.words:
-                                word_count += 1
-                                if word.confidence > 0:
-                                    confidences.append(word.confidence)
-
-            avg_confidence = (sum(confidences) / len(confidences)) if confidences else (0.90 if full_text.strip() else 0.0)
-            avg_confidence = round(float(avg_confidence), 4)
-
-            # Manual review check: low confidence or empty text
-            is_low_confidence = avg_confidence < settings.OCR_CONFIDENCE_THRESHOLD
-            is_empty = len(full_text.strip()) < 10
-            manual_review = is_low_confidence or is_empty
-
-            status = (
-                DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED
-                if manual_review
-                else DocumentProcessingStatus.OCR_COMPLETED
-            )
-
-            metadata = {
-                "provider": "google_cloud_vision",
-                "detected_languages": detected_languages or ["en"],
-                "block_count": block_count,
-                "word_count": word_count,
-                "confidence_threshold": settings.OCR_CONFIDENCE_THRESHOLD,
-                "pages": len(response.full_text_annotation.pages) if response.full_text_annotation else 1,
-            }
-
-            return OCRResult(
-                extracted_text=full_text,
-                confidence=avg_confidence,
-                metadata=metadata,
-                status=status,
-                manual_review_required=manual_review,
-                error_message="Low OCR extraction confidence or unreadable text." if manual_review else None,
-                completed_at=now,
-            )
-
+            if mime_type == "application/pdf":
+                return self._extract_from_pdf(client, file_bytes, now)
+            else:
+                return self._extract_from_image(client, file_bytes, now)
         except Exception as exc:
-            logger.error("Google Cloud Vision OCR extraction failed: %s", exc)
+            clean_err = sanitize_ocr_error_message(str(exc))
+            logger.error("Google Cloud Vision OCR extraction failed: %s", clean_err)
             return OCRResult(
                 extracted_text="",
                 confidence=0.0,
-                metadata={"provider": "google_cloud_vision", "exception": str(exc)},
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "exception": clean_err},
                 status=DocumentProcessingStatus.OCR_FAILED,
                 manual_review_required=True,
-                error_message=f"OCR processing failed: {str(exc)}",
+                error_message=f"OCR processing failed: {clean_err}",
                 completed_at=now,
             )
 
 
 class MockOCRAdapter(BaseOCRAdapter):
-    """High-fidelity mock OCR adapter for local development, CI testing, and offline MCA project demonstration.
+    """High-fidelity mock OCR adapter strictly restricted to development/test environments.
     
-    Generates realistic extracted text for standard Indian government certificates and supports
+    Generates realistic simulated text for standard Indian government certificates and supports
     deterministic testing of edge cases (low confidence, blurred images, corrupt files).
     """
 
@@ -231,7 +351,7 @@ class MockOCRAdapter(BaseOCRAdapter):
             return OCRResult(
                 extracted_text="",
                 confidence=0.0,
-                metadata={"provider": "mock_ocr", "test_case": "forced_failure"},
+                metadata={"provider": "mock_ocr", "is_mock": True, "test_case": "forced_failure"},
                 status=DocumentProcessingStatus.OCR_FAILED,
                 manual_review_required=True,
                 error_message="Document scan unreadable or image stream corrupted.",
@@ -246,6 +366,7 @@ class MockOCRAdapter(BaseOCRAdapter):
                 confidence=0.52,
                 metadata={
                     "provider": "mock_ocr",
+                    "is_mock": True,
                     "test_case": "low_confidence",
                     "word_count": 8,
                     "confidence_threshold": settings.OCR_CONFIDENCE_THRESHOLD,
@@ -261,31 +382,33 @@ class MockOCRAdapter(BaseOCRAdapter):
             return OCRResult(
                 extracted_text="",
                 confidence=0.10,
-                metadata={"provider": "mock_ocr", "test_case": "blank_document"},
+                metadata={"provider": "mock_ocr", "is_mock": True, "test_case": "blank_document"},
                 status=DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED,
                 manual_review_required=True,
                 error_message="Document appears blank or contains insufficient text.",
                 completed_at=now,
             )
 
-        # Standard successful extraction
+        # Standard successful simulated extraction
         text = self.TEMPLATES.get(
             document_type.lower(),
             (
                 f"OFFICIAL DOCUMENT - {document_type.upper().replace('_', ' ')}\n"
                 f"Original Filename: {filename}\n"
                 f"File MIME Type: {mime_type}\n"
-                "Certified and verified document for government service application."
+                "Certified document for government service application."
             ),
         )
 
         confidence = 0.94
         metadata = {
             "provider": "mock_ocr",
+            "is_mock": True,
             "detected_languages": ["en", "hi"],
             "block_count": 5,
             "word_count": len(text.split()),
             "confidence_threshold": settings.OCR_CONFIDENCE_THRESHOLD,
+            "notice": "Simulated mock extraction for local development and MCA demonstration.",
         }
 
         return OCRResult(
@@ -302,18 +425,27 @@ class MockOCRAdapter(BaseOCRAdapter):
 class OCRService:
     """Orchestrator for document text recognition.
     
-    Determines whether to use Google Cloud Vision API or the Mock adapter based on
-    system configuration and credential availability.
+    Security & Production Safety Architecture:
+    - In production (ENVIRONMENT == 'production' or DEBUG is False), MockOCRAdapter is
+      STRICTLY FORBIDDEN. It will NEVER execute or fall back silently.
+    - If Google Cloud Vision credentials are missing in production, an explicit failure
+      status (OCR_FAILED) is returned.
     """
 
     def __init__(self):
         self._gcv_adapter = GoogleCloudVisionAdapter()
         self._mock_adapter = MockOCRAdapter()
 
+    @staticmethod
+    def is_production() -> bool:
+        """Check whether the application is running under production constraints."""
+        env = getattr(settings, "ENVIRONMENT", "").lower()
+        debug = getattr(settings, "DEBUG", False)
+        return env == "production" or not debug
+
     def _should_use_gcv(self) -> bool:
         if settings.OCR_PROVIDER != "google_cloud_vision":
             return False
-        # Check if Google application credentials are provided and exist
         creds_file = settings.GOOGLE_APPLICATION_CREDENTIALS
         if creds_file and os.path.exists(creds_file):
             return True
@@ -328,7 +460,35 @@ class OCRService:
         document_type: str,
         filename: str,
     ) -> OCRResult:
-        """Process document through the selected OCR pipeline."""
+        """Process document through the configured OCR pipeline."""
+        now = datetime.now(timezone.utc)
+
+        # 1. STRICT PRODUCTION SAFETY CHECK
+        if self.is_production():
+            # In production, ONLY Google Cloud Vision is permitted.
+            # Mock OCR must NEVER execute or fall back silently.
+            if not self._should_use_gcv():
+                logger.error("Production OCR error: Google Cloud Vision credentials not configured.")
+                return OCRResult(
+                    extracted_text="",
+                    confidence=0.0,
+                    metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "credentials_unconfigured"},
+                    status=DocumentProcessingStatus.OCR_FAILED,
+                    manual_review_required=True,
+                    error_message="OCR processing service is unavailable in production: Cloud Vision credentials not configured.",
+                    completed_at=now,
+                )
+
+            # In production, invoke GCV directly. If it fails, return OCR_FAILED without falling back to mock.
+            logger.info("Processing document '%s' via Google Cloud Vision API in production", filename)
+            return self._gcv_adapter.extract_text(
+                file_bytes=file_bytes,
+                mime_type=mime_type,
+                document_type=document_type,
+                filename=filename,
+            )
+
+        # 2. DEVELOPMENT / TEST ENVIRONMENT
         if self._should_use_gcv():
             logger.info("Processing document '%s' via Google Cloud Vision API", filename)
             result = self._gcv_adapter.extract_text(
@@ -337,18 +497,20 @@ class OCRService:
                 document_type=document_type,
                 filename=filename,
             )
-            # If GCV encountered an unhandled infrastructure/auth error, fallback safely if in development
-            if result.status == DocumentProcessingStatus.OCR_FAILED and settings.DEBUG:
-                logger.warning("GCV failed in development; falling back to mock adapter.")
-                return self._mock_adapter.extract_text(
+            # In development, fallback to mock if live API is temporarily unreachable or credentials invalid
+            if result.status == DocumentProcessingStatus.OCR_FAILED:
+                logger.warning("GCV failed in development; falling back to Mock OCR adapter with is_mock=True.")
+                mock_result = self._mock_adapter.extract_text(
                     file_bytes=file_bytes,
                     mime_type=mime_type,
                     document_type=document_type,
                     filename=filename,
                 )
+                mock_result.metadata["fallback_from_gcv_failure"] = True
+                return mock_result
             return result
         else:
-            logger.info("Processing document '%s' via Mock OCR Adapter (Google Cloud credentials not set).", filename)
+            logger.info("Processing document '%s' via Mock OCR Adapter (development mode).", filename)
             return self._mock_adapter.extract_text(
                 file_bytes=file_bytes,
                 mime_type=mime_type,

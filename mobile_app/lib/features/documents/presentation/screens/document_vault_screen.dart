@@ -79,8 +79,9 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final verifiedCount = _documents.where((d) => d.ocrStatus == DocumentProcessingStatus.ocrCompleted && !d.manualReviewRequired).length;
+    final ocrCompletedCount = _documents.where((d) => d.ocrStatus == DocumentProcessingStatus.ocrCompleted && !d.manualReviewRequired).length;
     final reviewCount = _documents.where((d) => d.manualReviewRequired || d.ocrStatus == DocumentProcessingStatus.manualReviewRequired).length;
+
 
     return Scaffold(
       appBar: AppBar(
@@ -120,11 +121,12 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                   Container(height: 36, width: 1, color: Colors.grey.shade300),
                   Expanded(
                     child: _buildSummaryItem(
-                      label: 'OCR Verified',
-                      value: '$verifiedCount',
+                      label: 'OCR Completed',
+                      value: '$ocrCompletedCount',
                       color: AppTheme.accentGreen,
                     ),
                   ),
+
                   Container(height: 36, width: 1, color: Colors.grey.shade300),
                   Expanded(
                     child: _buildSummaryItem(
@@ -369,3 +371,4 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
     );
   }
 }
+

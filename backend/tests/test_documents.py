@@ -343,3 +343,145 @@ class TestDocumentVaultAndOCR:
         chk3 = res_chk3.json()
         assert chk3["total_uploaded"] == 2
         assert chk3["is_fully_prepared"] is True
+
+    def test_production_mode_strictly_disables_mock_ocr(self, client, monkeypatch):
+        """In production, MockOCRAdapter must NEVER run or silently fall back."""
+        headers = get_auth_headers(client, "+919900000020")
+        monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+        monkeypatch.setattr(settings, "DEBUG", False)
+        monkeypatch.setattr(settings, "GOOGLE_APPLICATION_CREDENTIALS", None)
+
+        response = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("cert_prod.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "income_certificate"},
+            headers=headers,
+        )
+
+        assert response.status_code == 201
+        doc = response.json()["document"]
+        assert doc["ocr_status"] == DocumentProcessingStatus.OCR_FAILED
+        assert doc["manual_review_required"] is True
+        assert "credentials not configured" in doc["ocr_error_message"].lower()
+        assert "production" in doc["ocr_error_message"].lower()
+        # Mock text must NEVER be returned in production
+        assert doc["ocr_extracted_text"] is None or doc["ocr_extracted_text"] == ""
+
+    def test_google_vision_failure_sanitizes_internal_paths(self, client, monkeypatch):
+        """Vision API exceptions must sanitize internal filesystem paths from error messages."""
+        headers = get_auth_headers(client, "+919900000021")
+        from app.services.ocr_service import GoogleCloudVisionAdapter
+
+        def mock_failing_extract(*args, **kwargs):
+            raise RuntimeError("Vision API connection failure at C:\\Users\\secret_admin\\credentials.json (errno 111)")
+
+        monkeypatch.setattr(GoogleCloudVisionAdapter, "extract_text", mock_failing_extract)
+        monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+        monkeypatch.setattr(settings, "DEBUG", False)
+        # Fake credentials path so should_use_gcv is True
+        monkeypatch.setattr("app.services.ocr_service.OCRService._should_use_gcv", lambda self: True)
+
+        response = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("cert_fail.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "income_certificate"},
+            headers=headers,
+        )
+        assert response.status_code == 201
+        doc = response.json()["document"]
+        assert doc["ocr_status"] == DocumentProcessingStatus.OCR_FAILED
+        # Verify internal path was redacted
+        assert "C:\\Users\\secret_admin" not in doc["ocr_error_message"]
+        assert "[LOCAL_PATH]" in doc["ocr_error_message"]
+
+    def test_retry_ocr_prevents_duplicate_concurrent_processing(self, client, db_session):
+        """Calling retry-ocr when status is already PROCESSING returns 409 Conflict."""
+        headers = get_auth_headers(client, "+919900000022")
+        res_up = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("doc_concurrent.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "income_certificate"},
+            headers=headers,
+        )
+        doc_id = res_up.json()["document"]["id"]
+
+        # Directly set status to PROCESSING in database to simulate concurrent background job
+        doc_in_db = db_session.query(DocumentMetadata).filter(DocumentMetadata.id == uuid.UUID(doc_id)).first()
+        doc_in_db.ocr_status = DocumentProcessingStatus.PROCESSING
+        db_session.commit()
+
+        # Concurrent attempt must be rejected
+        res_conflict = client.post(f"/api/v1/documents/{doc_id}/retry-ocr", headers=headers)
+        assert res_conflict.status_code == 409
+        assert "already currently processing" in res_conflict.json()["detail"].lower()
+
+    def test_download_filename_header_sanitization(self, client, db_session):
+        """Download Content-Disposition header must sanitize CRLF, quotes, and semicolons."""
+        headers = get_auth_headers(client, "+919900000023")
+        res_up = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("legit.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "income_certificate"},
+            headers=headers,
+        )
+        doc_id = res_up.json()["document"]["id"]
+
+        # Inject dangerous filename in DB record to test header defenses
+        doc_in_db = db_session.query(DocumentMetadata).filter(DocumentMetadata.id == uuid.UUID(doc_id)).first()
+        doc_in_db.original_filename = 'malicious\r\nSet-Cookie: evil=1"; name="injected.pdf'
+        db_session.commit()
+
+        res_dl = client.get(f"/api/v1/documents/{doc_id}/download", headers=headers)
+        assert res_dl.status_code == 200
+        cd_header = res_dl.headers.get("content-disposition", "")
+        # Header must NOT contain raw carriage return, linefeed, or injected semicolons inside filename
+        assert "\r" not in cd_header
+        assert "\n" not in cd_header
+        filename_part = cd_header.split("filename=")[1]
+        assert filename_part.startswith('"') and filename_part.endswith('"')
+        assert ";" not in filename_part.strip('"')
+
+
+    def test_no_sensitive_ocr_text_in_logs(self, client, caplog):
+        """Application logs must never dump extracted document text or citizen PII."""
+        import logging
+        headers = get_auth_headers(client, "+919900000024")
+        with caplog.at_level(logging.DEBUG):
+            response = client.post(
+                "/api/v1/documents/upload",
+                files={"file": ("confidential_audit.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+                data={"document_type": "income_certificate"},
+                headers=headers,
+            )
+            assert response.status_code == 201
+
+        # Captured log text must NOT contain full extracted certificate body text
+        assert "Rupees One Lakh Twenty Thousand Only" not in caplog.text
+        assert "OFFICE OF THE TAHSILDAR" not in caplog.text
+
+    def test_blank_and_corrupt_document_processing(self, client):
+        """Blank documents require manual review; corrupt scans fail safely."""
+        headers = get_auth_headers(client, "+919900000025")
+
+        # 1. Blank document
+        res_blank = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("blank_scan.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "income_certificate"},
+            headers=headers,
+        )
+        doc_blank = res_blank.json()["document"]
+        assert doc_blank["ocr_status"] == DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED
+        assert doc_blank["manual_review_required"] is True
+
+        # 2. Corrupt document
+        res_corrupt = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("corrupt_scan.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "income_certificate"},
+            headers=headers,
+        )
+        doc_corrupt = res_corrupt.json()["document"]
+        assert doc_corrupt["ocr_status"] == DocumentProcessingStatus.OCR_FAILED
+        assert doc_corrupt["manual_review_required"] is True
+

@@ -142,14 +142,15 @@ class _SchemeDocumentChecklistWidgetState extends State<SchemeDocumentChecklistW
                       const SizedBox(width: 8),
                       Text(
                         data.isFullyPrepared
-                            ? 'All Required Documents Prepared'
-                            : 'Document Preparation In Progress',
+                            ? 'All Required Document Types Uploaded'
+                            : 'Document Uploads In Progress',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                           color: data.isFullyPrepared ? AppTheme.accentGreen : AppTheme.primaryBlue,
                         ),
                       ),
+
                     ],
                   ),
                   Text(
@@ -268,3 +269,4 @@ class _SchemeDocumentChecklistWidgetState extends State<SchemeDocumentChecklistW
     );
   }
 }
+

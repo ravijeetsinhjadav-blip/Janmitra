@@ -250,7 +250,7 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                           Icon(Icons.description, color: Colors.indigo, size: 20),
                           SizedBox(width: 6),
                           Text(
-                            'Required Documents Readiness',
+                            'Required Document Types (Checklist)',
                             style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ],

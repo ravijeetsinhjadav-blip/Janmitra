@@ -61,3 +61,4 @@ class SchemeDocumentChecklistResponse(BaseModel):
         "Document presence in your JanMitra vault verifies readiness for official submission, "
         "but does not replace government verification or guarantee scheme approval."
     )
+

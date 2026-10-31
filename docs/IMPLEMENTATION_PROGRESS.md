@@ -182,14 +182,61 @@
 
 ### Task E: Flutter Mobile Application (Vault Feature)
 - **Models & Service:** `DocumentMetadataModel`, `SchemeDocumentChecklistModel`, and `DocumentService` handling multipart HTTP uploads and vault operations.
-- **DocumentVaultScreen:** Modern citizen vault with total file counters, OCR verified count, review needed count, category filter chips, document cards with status badges and confidence chips, and floating action button.
+- **DocumentVaultScreen:** Modern citizen vault with total file counters, OCR completed count, review needed count, category filter chips, document cards with status badges and confidence chips, and floating action button.
 - **UploadDocumentDialog:** Bottom sheet supporting Camera, Gallery, and Custom File Picker (PDF/Image) with live progress indicators.
 - **DocumentDetailScreen:** Complete view of document metadata, extraction confidence progress bar, manual review warning banner, selectable monospace OCR text with copy-to-clipboard, retry OCR button, and delete document confirmation.
 - **SchemeDocumentChecklistWidget:** Embedded in `SchemeDetailsScreen` to show document readiness checklist with one-click upload for missing documents.
 
 ### Task F: Testing & Quality Metrics
-- **Backend Pytest Suite:** **76 passed, 1 skipped (live PostgreSQL test), 0 failed** across 77 tests (including 13 dedicated vault & OCR tests).
+- **Backend Pytest Suite:** **82 passed, 1 skipped (live PostgreSQL test), 0 failed** across 83 tests (including 19 dedicated vault, OCR, security, and terminology audit tests).
 - **Flutter Test Suite:** **14 passed, 0 failed** across `document_widgets_test.dart`, `scheme_widgets_test.dart`, and `widget_test.dart`.
 - **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+
+---
+
+## 4. Phase 5 Final Security & OCR Reliability Audit
+
+### 4.1 Mock OCR Production Safety
+- **Strict Environment Guard:** Evaluated via `is_production()`, inspecting `ENVIRONMENT == "production"` and `DEBUG is False`.
+- **Zero Silent Fallback:** In production, any attempt to invoke `MockOCRAdapter` fails with an explicit error.
+- **Missing Cloud Vision Credentials Handling:** In production, if Cloud Vision credentials are absent or the service is unavailable, document status transitions to `OCR_FAILED` with an explicit, sanitized error message (`"OCR extraction unavailable in production: Cloud Vision credentials not configured."`) and sets `manual_review_required = True`.
+- **Simulated Text Disclaimer:** Mock-generated output is never presented as actual extracted text; it explicitly tags metadata with `is_mock: True` and an advisory note.
+- **Automated Test Coverage:** Verified via `test_production_mode_strictly_disables_mock_ocr`.
+
+### 4.2 UI & Response Terminology Alignment
+- **Term Clarification:**
+  - Replaced misleading `"OCR Verified"` with `"OCR Completed"` across backend status mappings, Flutter screens, models, and test assertions.
+  - Replaced checklist header `"Required Documents Prepared"` with `"Required Document Types Uploaded"`.
+- **Four-Way Distinction Enforced:**
+  1. *Document Uploaded:* File received, magic bytes verified, stored on disk.
+  2. *OCR Completed / Text Extracted:* Machine reading finished; text available for evaluation.
+  3. *Manual Review Required:* Machine confidence below threshold (<0.70) or unreadable document.
+  4. *Official Government Verification:* Outside app scope; never claimed or guaranteed.
+- **Statutory Non-Guarantee Notice:** Prominently displayed across Flutter screens and API responses to prevent user misconceptions regarding official scheme eligibility.
+
+### 4.3 Secure File Storage & Path Traversal Protections
+- **Storage Confinement:** Base directory path canonicalization ensures all uploads resolve strictly under configured `storage/documents/<user_id>/`. Path traversal payloads (`../`, `..\\`) are rejected with 403 Forbidden.
+- **Header Injection & Response Splitting Defense:** Implemented `sanitize_header_filename` stripping carriage returns (`\r`), line feeds (`\n`), quotes, semicolons, and control characters in `Content-Disposition: inline; filename="..."`. Added `X-Content-Type-Options: nosniff`.
+- **Transaction Rollback & Deletion Consistency:**
+  - In `upload_document`: Any database or OCR failure triggers disk unlink to prevent orphaned files.
+  - In `delete_document`: Database transaction rollback is enforced if an error occurs before filesystem unlink.
+- **Encryption-at-Rest Architecture:** Transparently documented that application-level file encryption is not implemented; filesystem confidentiality relies on OS/volume-level BitLocker/LUKS encryption.
+
+### 4.4 Sensitive OCR Data Protection
+- **Log Sanitation:** Full OCR extracted text and raw document strings are excluded from application loggers. Verified via caplog inspection in `test_no_sensitive_ocr_text_in_logs`.
+- **Error Message Sanitation:** Implemented `sanitize_ocr_error_message(msg)` to strip local Windows/Unix absolute paths (`C:\Users\...`, `/home/...`) from failure messages stored in the database.
+- **Owner-Only Access (IDOR Prevention):** All endpoints verify `document.user_id == current_user.id`.
+- **Purge on Deletion:** Deletion permanently unlinks the physical file from disk and zeroes metadata/text from PostgreSQL.
+
+### 4.5 Google Cloud Vision PDF Processing
+- **Format-Specific Extraction:** Synchronous `batch_annotate_files` handles multi-page PDFs (pages 1 to 5) directly using in-memory byte payloads, avoiding external GCS bucket requirements for standard applications.
+- **Architectural Boundary:** Documented that PDFs exceeding 5 pages require asynchronous batch annotation (`async_batch_annotate_files`) with Google Cloud Storage staging.
+- **Concurrent Processing Protection:** `retry_ocr` endpoint returns `409 Conflict` if the document is already in `PROCESSING` status.
+
+### 4.6 Verification Summary
+- **Backend Tests:** 82 passed, 1 skipped, 0 failed in 14.93s.
+- **Flutter Widget Tests:** 14 passed, 0 failed.
+- **Flutter Analyze:** 0 issues found.
+- **Alembic Static SQL:** Verified PostgreSQL DDL upgrade/downgrade.
 
 - [ ] **Phase 8:** Final Hardening, Integration & Academic Defense Preparation (PENDING USER INITIATION)

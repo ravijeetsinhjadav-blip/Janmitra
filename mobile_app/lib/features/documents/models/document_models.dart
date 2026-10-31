@@ -159,11 +159,12 @@ class DocumentMetadataModel {
   // Status badge label
   String get statusBadgeText {
     if (ocrStatus == DocumentProcessingStatus.ocrCompleted && !manualReviewRequired) {
-      return 'OCR Verified';
+      return 'OCR Completed';
     }
     if (manualReviewRequired || ocrStatus == DocumentProcessingStatus.manualReviewRequired) {
       return 'Review Needed';
     }
+
     if (ocrStatus == DocumentProcessingStatus.ocrFailed) {
       return 'OCR Failed';
     }
@@ -247,3 +248,4 @@ class SchemeDocumentChecklistModel {
     );
   }
 }
+

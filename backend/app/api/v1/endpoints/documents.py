@@ -127,14 +127,17 @@ def download_document(
         document_id=document_id,
         user=current_user,
     )
+    safe_filename = document_service.sanitize_header_filename(filename)
     return Response(
         content=file_bytes,
         media_type=mime_type,
         headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Disposition": f'inline; filename="{safe_filename}"',
             "Cache-Control": "private, no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
         },
     )
+
 
 
 @router.delete(
@@ -167,3 +170,4 @@ def retry_ocr(
     """Re-run OCR processing on document."""
     doc = document_service.retry_ocr(db=db, document_id=document_id, user=current_user)
     return DocumentMetadataResponse.model_validate(doc)
+
