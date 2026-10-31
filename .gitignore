@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Python virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Node / Admin Dashboard
+node_modules/
+dist/
+dist-ssr/
+build/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+mobile_app/build/
+mobile_app/.dart_tool/
+*.apk
+*.aab
+*.ipa
+
+# Database & Document backups (preserve folders with .gitkeep)
+backups/database/*
+!backups/database/.gitkeep
+backups/documents/*
+!backups/documents/.gitkeep
+
+# IDEs and OS files
+.vscode/
+.idea/
+*.suo
+*.user
+*.useros
+*.sln.docstates
+.DS_Store
+Thumbs.db
+Desktop.ini
