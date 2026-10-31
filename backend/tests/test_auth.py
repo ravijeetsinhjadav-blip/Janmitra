@@ -98,6 +98,15 @@ class TestOTPWorkflow:
         )
         assert res_lockout.status_code in (400, 429)
 
+    def test_dev_otp_never_exposed_in_production(self, client, monkeypatch):
+        # Emulate production environment
+        from app.core.config import settings
+        monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+
+        res = client.post("/api/v1/auth/send-otp", json={"mobile_number": "9111100000"})
+        assert res.status_code == 200
+        assert res.json()["dev_otp"] is None
+
 
 class TestJWTSessionsAndRoles:
     def test_existing_user_login_no_duplicate(self, client, db_session):
@@ -190,3 +199,4 @@ class TestJWTSessionsAndRoles:
             json={"refresh_token": refresh_token},
         )
         assert res_refresh.status_code == 401
+

@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_active_citizen
 from app.models.user import User
@@ -166,7 +167,7 @@ def request_account_deletion(
     3. Retains audit compliance data safely without immediate destructive wipe.
     """
     now = datetime.now(timezone.utc)
-    scheduled_for = now + timedelta(days=30)
+    scheduled_for = now + timedelta(days=settings.ACCOUNT_DELETION_RETENTION_DAYS)
 
     # Check for existing pending request
     existing = (
@@ -196,6 +197,9 @@ def request_account_deletion(
     )
     db.add(deletion_req)
 
+    # Deactivate citizen account upon deletion request to prevent access during retention
+    current_user.is_active = False
+
     # Revoke all active sessions immediately
     db.query(UserSession).filter(
         UserSession.user_id == current_user.id,
@@ -212,3 +216,4 @@ def request_account_deletion(
         requested_at=deletion_req.requested_at,
         scheduled_for=deletion_req.scheduled_for,
     )
+

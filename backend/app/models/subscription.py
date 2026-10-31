@@ -8,10 +8,9 @@ from app.core.database import Base
 # Free: Basic eligibility checks
 # Premium: Unlimited checks, advanced document verification guidance, priority readiness reports
 # - Monthly:    ₹99 / month
-# - 6 Months:   ₹499 / 6 months
-# - Yearly:     ₹899 / year
+# - Yearly:     ₹799 / year
 PLAN_TYPES = ["free", "premium"]
-BILLING_CYCLES = ["monthly", "six_months", "yearly"]
+BILLING_CYCLES = ["monthly", "yearly"]
 
 
 class Subscription(Base):
@@ -48,7 +47,7 @@ class Subscription(Base):
     billing_cycle = Column(
         String(20),
         nullable=True,
-        comment="Billing frequency: 'monthly', 'six_months', or 'yearly'",
+        comment="Billing frequency: 'monthly' or 'yearly'",
     )
     status = Column(
         String(20),

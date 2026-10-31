@@ -70,3 +70,4 @@ class OTPChallenge(Base):
 
     def __repr__(self) -> str:
         return f"<OTPChallenge id={self.id} mobile={self.mobile_number} verified={self.is_verified}>"
+

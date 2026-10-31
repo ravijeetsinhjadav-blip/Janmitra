@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     OTP_DEV_MODE: bool = True  # Returns development OTP for local testing
     SMS_PROVIDER: str = "development"  # Options: 'development', 'production_sms'
 
+    # User Account Deletion & Retention Settings (Phase 3)
+    ACCOUNT_DELETION_RETENTION_DAYS: int = 30  # Configurable grace/statutory retention period
+
     @property
     def cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]

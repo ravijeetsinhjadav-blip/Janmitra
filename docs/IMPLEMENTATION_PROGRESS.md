@@ -89,15 +89,18 @@
     7. `AccountDeletionDialog`: 30-day retention confirmation dialog.
 
 - [x] **Task 8: Testing & Verification**
-  - **Backend:** 30 unit and integration tests written in `backend/tests/` (100% passed).
-  - **Mobile:** 3 widget tests written in `mobile_app/test/widget_test.dart` (100% passed).
+  - **Backend Unit Tests:** 31 unit tests across auth, user management, and core database models using in-memory SQLite (100% passed).
+  - **PostgreSQL Compatibility Tests:** 3 dedicated PostgreSQL dialect tests verifying UUID, JSONB, and foreign key cascade rules without requiring an active daemon (100% passed); 1 live PostgreSQL integration test prepared and skipped cleanly when port 5432 is offline.
+  - **Subscription Pricing Correction:** Audited and corrected subscription pricing to approved standard: Monthly ₹99, Yearly ₹799 (removed unauthorized six-month cycle and non-standard pricing).
+  - **Account Deletion Retention:** Ensured deletion request deactivates the citizen account, revokes sessions, and adheres to statutory retention without immediate data destruction.
+  - **Mobile Client:** 3 widget tests written in `mobile_app/test/widget_test.dart` (100% passed).
   - **Code Quality:** `flutter analyze` completed with **0 errors, 0 warnings**.
 
 ---
 
 ## 3. Verification Commands & Actual Results
 
-### 1. Backend Pytest Test Suite
+### 3.1 Backend Unit & Integration Tests (Pytest)
 ```powershell
 & .\backend\venv\Scripts\pytest.exe .\backend\tests -v
 ```
@@ -107,43 +110,49 @@
 platform win32 -- Python 3.13.3, pytest-9.2.0, pluggy-1.7.0
 rootdir: C:\Users\ravij\OneDrive\Desktop\Janmitra\backend
 configfile: pytest.ini
-collected 30 items
+plugins: anyio-4.15.1, asyncio-1.4.1
+collected 35 items
 
-backend\tests\test_auth.py::TestOTPWorkflow::test_otp_generation_success PASSED          [  3%]
-backend\tests\test_auth.py::TestOTPWorkflow::test_invalid_mobile_number_rejection PASSED [  6%]
-backend\tests\test_auth.py::TestOTPWorkflow::test_otp_verification_and_new_user_registration PASSED [ 10%]
-backend\tests\test_auth.py::TestOTPWorkflow::test_incorrect_otp_rejection PASSED        [ 13%]
-backend\tests\test_auth.py::TestOTPWorkflow::test_expired_otp_rejection PASSED          [ 16%]
-backend\tests\test_auth.py::TestOTPWorkflow::test_otp_attempt_limits_lockout PASSED     [ 20%]
-backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_existing_user_login_no_duplicate PASSED [ 23%]
-backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_authenticated_me_endpoint PASSED [ 26%]
-backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_unauthorized_without_token PASSED [ 30%]
-backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_refresh_token_rotation PASSED  [ 33%]
-backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_logout_revokes_token PASSED    [ 36%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_all_expected_tables_registered PASSED [ 40%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_user_model_schema PASSED [ 43%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_user_profile_relationship_and_privacy PASSED [ 46%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_scheme_model_schema PASSED [ 50%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_document_metadata_storage_separation PASSED [ 53%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_assessment_jsonb_and_advisory_nature PASSED [ 56%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_application_manual_status_values PASSED [ 60%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_subscription_pricing_and_plans PASSED [ 63%]
-backend\tests\test_database.py::TestDatabaseModelsMetadata::test_notification_model_schema PASSED [ 66%]
-backend\tests\test_database.py::TestDatabaseHealthApi::test_root_endpoint_includes_db_link PASSED [ 70%]
-backend\tests\test_database.py::TestDatabaseHealthApi::test_general_health_endpoint_still_operational PASSED [ 73%]
-backend\tests\test_database.py::TestDatabaseHealthApi::test_database_health_endpoint_safe_response PASSED [ 76%]
-backend\tests\test_health.py::test_health_check PASSED                                  [ 80%]
-backend\tests\test_health.py::test_root_endpoint PASSED                                 [ 83%]
-backend\tests\test_users.py::TestUserProfileManagement::test_create_and_get_profile PASSED [ 86%]
-backend\tests\test_users.py::TestUserProfileManagement::test_patch_profile PASSED      [ 90%]
-backend\tests\test_users.py::TestUserProfileManagement::test_user_data_isolation PASSED [ 93%]
-backend\tests\test_users.py::TestUserProfileManagement::test_delete_profile PASSED     [ 96%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_otp_generation_success PASSED          [  2%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_invalid_mobile_number_rejection PASSED [  5%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_otp_verification_and_new_user_registration PASSED [  8%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_incorrect_otp_rejection PASSED        [ 11%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_expired_otp_rejection PASSED          [ 14%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_otp_attempt_limits_lockout PASSED     [ 17%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_dev_otp_never_exposed_in_production PASSED [ 20%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_existing_user_login_no_duplicate PASSED [ 22%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_authenticated_me_endpoint PASSED [ 25%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_unauthorized_without_token PASSED [ 28%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_refresh_token_rotation PASSED  [ 31%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_logout_revokes_token PASSED    [ 34%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_all_expected_tables_registered PASSED [ 37%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_user_model_schema PASSED [ 40%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_user_profile_relationship_and_privacy PASSED [ 42%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_scheme_model_schema PASSED [ 45%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_document_metadata_storage_separation PASSED [ 48%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_assessment_jsonb_and_advisory_nature PASSED [ 51%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_application_manual_status_values PASSED [ 54%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_subscription_pricing_and_plans PASSED [ 57%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_notification_model_schema PASSED [ 60%]
+backend\tests\test_database.py::TestDatabaseHealthApi::test_root_endpoint_includes_db_link PASSED [ 62%]
+backend\tests\test_database.py::TestDatabaseHealthApi::test_general_health_endpoint_still_operational PASSED [ 65%]
+backend\tests\test_database.py::TestDatabaseHealthApi::test_database_health_endpoint_safe_response PASSED [ 68%]
+backend\tests\test_health.py::test_health_check PASSED                                  [ 71%]
+backend\tests\test_health.py::test_root_endpoint PASSED                                 [ 74%]
+backend\tests\test_postgres_integration.py::TestPostgresDialectCompatibility::test_all_models_compile_for_postgresql PASSED [ 77%]
+backend\tests\test_postgres_integration.py::TestPostgresDialectCompatibility::test_postgresql_uuid_and_jsonb_types PASSED [ 80%]
+backend\tests\test_postgres_integration.py::TestPostgresDialectCompatibility::test_postgresql_foreign_key_cascades PASSED [ 82%]
+backend\tests\test_postgres_integration.py::TestPostgresLiveIntegration::test_live_postgres_otp_and_session_persistence SKIPPED [ 85%]
+backend\tests\test_users.py::TestUserProfileManagement::test_create_and_get_profile PASSED [ 88%]
+backend\tests\test_users.py::TestUserProfileManagement::test_patch_profile PASSED      [ 91%]
+backend\tests\test_users.py::TestUserProfileManagement::test_user_data_isolation PASSED [ 94%]
+backend\tests\test_users.py::TestUserProfileManagement::test_delete_profile PASSED     [ 97%]
 backend\tests\test_users.py::TestUserProfileManagement::test_account_deletion_request_workflow PASSED [100%]
 
-======================== 30 passed, 1 warning in 9.92s ========================
+================== 34 passed, 1 skipped, 1 warning in 8.07s ===================
 ```
 
-### 2. Flutter Mobile Tests
+### 3.2 Flutter Mobile Widget Tests
 ```powershell
 cd mobile_app; ..\flutter\bin\flutter.bat test
 ```
@@ -156,18 +165,25 @@ cd mobile_app; ..\flutter\bin\flutter.bat test
 00:04 +3: All tests passed!
 ```
 
-### 3. Flutter Static Analysis
+### 3.3 Flutter Static Analysis
 ```powershell
 cd mobile_app; ..\flutter\bin\flutter.bat analyze
 ```
 **Actual Output:**
 ```
 Analyzing mobile_app...
-No issues found! (ran in 9.3s)
+No issues found! (ran in 123.4s)
 ```
 
-### 4. Alembic Static Migration Verification
+### 3.4 Alembic Static Migration Verification
 ```powershell
 Set-Location backend; & .\venv\Scripts\alembic.exe upgrade head --sql
 ```
-**Actual Output:** Successfully generated clean PostgreSQL DDL creating `otp_challenges`, `user_sessions`, and `account_deletion_requests` with foreign keys and unique constraints.
+**Actual Output:** Successfully generated clean transactional PostgreSQL DDL migrating from `e36378f07849` to `4dcd7dfc601d`, creating `otp_challenges`, `user_sessions`, and `account_deletion_requests` with strict foreign key constraints and indexes.
+
+### 3.5 Manual Testing Still Required
+The following verification steps require external system resources and must be executed manually once infrastructure is provisioned:
+1. **Live PostgreSQL Service:** Start local or remote PostgreSQL daemon, create `janmitra_db`, and execute `alembic upgrade head`.
+2. **Third-Party SMS Gateway:** When a production SMS provider (e.g., Twilio, Fast2SMS) is finalized, configure production API credentials in `.env` and verify over-the-air SMS OTP delivery to a physical device.
+3. **Physical Android/iOS Device Run:** Deploy Flutter app to a physical Android device or emulator to test hardware Keystore encryption and biometric unlock.
+

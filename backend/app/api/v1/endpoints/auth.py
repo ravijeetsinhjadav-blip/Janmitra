@@ -144,3 +144,4 @@ def logout(
 def get_auth_me(current_user: User = Depends(get_current_user)):
     """Retrieve currently authenticated citizen identity."""
     return current_user
+

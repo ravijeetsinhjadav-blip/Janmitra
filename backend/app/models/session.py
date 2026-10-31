@@ -77,3 +77,4 @@ class UserSession(Base):
 
     def __repr__(self) -> str:
         return f"<UserSession id={self.id} user_id={self.user_id} revoked={self.is_revoked}>"
+

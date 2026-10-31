@@ -101,8 +101,12 @@ class OTPService:
         provider = get_sms_provider()
         provider.send_otp(mobile, plain_otp)
 
-        # Only return plain_otp if dev mode is enabled
-        dev_otp = plain_otp if settings.OTP_DEV_MODE else None
+        # Security: Only return plain_otp if BOTH dev mode is enabled AND environment is development
+        dev_otp = (
+            plain_otp
+            if (settings.OTP_DEV_MODE and settings.ENVIRONMENT.lower() == "development")
+            else None
+        )
         return challenge, dev_otp
 
     @staticmethod

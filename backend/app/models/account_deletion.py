@@ -64,3 +64,4 @@ class AccountDeletionRequest(Base):
 
     def __repr__(self) -> str:
         return f"<AccountDeletionRequest id={self.id} user_id={self.user_id} status='{self.status}'>"
+

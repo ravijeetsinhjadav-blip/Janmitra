@@ -155,11 +155,10 @@ All database entities are built using **SQLAlchemy 2.x Declarative Base** with *
 
 7. **`Subscription` (`subscriptions`)**:
    - Subscription tier and billing records.
-   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `plan_type` (`free`/`premium`), `billing_cycle` (`monthly`/`six_months`/`yearly`), `status`, `start_date`, `end_date`.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `plan_type` (`free`/`premium`), `billing_cycle` (`monthly`/`yearly`), `status`, `start_date`, `end_date`.
    - Approved pricing tiers:
-     - Monthly: ₹99 / month
-     - 6 Months: ₹499 / 6 months
-     - Yearly: ₹899 / year
+     - Premium Monthly: ₹99 / month
+     - Premium Yearly: ₹799 / year
 
 8. **`Notification` (`notifications`)**:
    - Citizen in-app deadline reminders, scheme alerts, and status changes.

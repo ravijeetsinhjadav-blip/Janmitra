@@ -135,3 +135,8 @@ class TestUserProfileManagement:
         assert data["status"] == "pending"
         assert "scheduled_for" in data
         assert "All active sessions have been revoked" in data["message"]
+
+        # Subsequent requests with same token should be rejected as citizen account is now deactivated
+        res_after = client.get("/api/v1/users/me", headers=headers)
+        assert res_after.status_code in (401, 403)
+

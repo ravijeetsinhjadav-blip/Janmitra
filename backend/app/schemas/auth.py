@@ -58,3 +58,4 @@ class LogoutRequest(BaseModel):
 class MessageResponse(BaseModel):
     status: str = "success"
     message: str
+

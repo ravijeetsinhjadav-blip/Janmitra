@@ -150,7 +150,7 @@ class TestDatabaseModelsMetadata:
         assert "end_date" in table.c
 
         assert PLAN_TYPES == ["free", "premium"]
-        assert BILLING_CYCLES == ["monthly", "six_months", "yearly"]
+        assert BILLING_CYCLES == ["monthly", "yearly"]
 
     def test_notification_model_schema(self):
         table = Base.metadata.tables["notifications"]

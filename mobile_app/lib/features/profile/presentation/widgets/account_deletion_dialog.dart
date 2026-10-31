@@ -90,7 +90,7 @@ class _AccountDeletionDialogState extends State<AccountDeletionDialog> {
                 border: Border.all(color: Colors.red.shade200),
               ),
               child: const Text(
-                'Notice: Under JanMitra Assist privacy policy, your account will be deactivated immediately and all active sessions will be revoked. Your data will be held for a 30-day scheduled retention period before permanent deletion.',
+                'Notice: Under JanMitra Assist privacy policy, your account will be deactivated immediately and all active sessions will be revoked. Your deletion request will be processed following statutory retention and verification guidelines.',
                 style: TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
               ),
             ),
