@@ -18,7 +18,7 @@ def get_auth_headers(client, mobile_number: str) -> dict:
 
 
 class TestBirthdayBoundaryAndAgeCalculation:
-    """Unit tests for exact birthday boundary age calculation."""
+    """Unit tests for exact birthday boundary age calculation, leap years, and cutoff dates."""
 
     def test_exact_birthday_boundary(self):
         ref_today = date(2026, 10, 31)
@@ -35,18 +35,59 @@ class TestBirthdayBoundaryAndAgeCalculation:
         age_yesterday = EligibilityEngine.calculate_age("2008-10-30", reference_date=ref_today)
         assert age_yesterday == 18
 
-    def test_leap_year_feb_29_boundary(self):
-        # Born on Feb 29, 2004 (leap year)
-        # Evaluated in non-leap year 2025
+    def test_leap_year_feb_29_statutory_anniversary_convention(self):
+        """Under statutory/common law convention, 365 full days elapse on March 1 in common years."""
         dob_leap = "2004-02-29"
 
-        # On Feb 28, 2025 (day before anniversary month): 20
-        age_feb28 = EligibilityEngine.calculate_age(dob_leap, reference_date=date(2025, 2, 28))
+        # On Feb 28, 2025 (common year): 20
+        age_feb28 = EligibilityEngine.calculate_age(
+            dob_leap, reference_date=date(2025, 2, 28), feb29_convention="statutory_anniversary"
+        )
         assert age_feb28 == 20
 
-        # On Mar 1, 2025 (anniversary month arrived): 21
-        age_mar01 = EligibilityEngine.calculate_age(dob_leap, reference_date=date(2025, 3, 1))
+        # On Mar 1, 2025 (common year): 21
+        age_mar01 = EligibilityEngine.calculate_age(
+            dob_leap, reference_date=date(2025, 3, 1), feb29_convention="statutory_anniversary"
+        )
         assert age_mar01 == 21
+
+    def test_leap_year_feb_29_end_of_february_convention(self):
+        """Under administrative convention, anniversary is deemed on the final day of February (Feb 28)."""
+        dob_leap = "2004-02-29"
+
+        # On Feb 27, 2025 (common year): 20
+        age_feb27 = EligibilityEngine.calculate_age(
+            dob_leap, reference_date=date(2025, 2, 27), feb29_convention="end_of_february"
+        )
+        assert age_feb27 == 20
+
+        # On Feb 28, 2025 (common year): 21
+        age_feb28 = EligibilityEngine.calculate_age(
+            dob_leap, reference_date=date(2025, 2, 28), feb29_convention="end_of_february"
+        )
+        assert age_feb28 == 21
+
+        # In leap year 2024: both conventions align on Feb 29
+        age_leap_feb28 = EligibilityEngine.calculate_age(
+            dob_leap, reference_date=date(2024, 2, 28), feb29_convention="end_of_february"
+        )
+        assert age_leap_feb28 == 19
+        age_leap_feb29 = EligibilityEngine.calculate_age(
+            dob_leap, reference_date=date(2024, 2, 29), feb29_convention="end_of_february"
+        )
+        assert age_leap_feb29 == 20
+
+    def test_scheme_specific_official_cutoff_dates(self):
+        """Schemes often specify fixed official cutoff dates (e.g. Jan 1 or July 1 of recruitment year)."""
+        dob = "2006-05-15"
+
+        # As of Jan 1, 2024: 17 years old
+        age_jan1 = EligibilityEngine.calculate_age(dob, reference_date=date(2024, 1, 1))
+        assert age_jan1 == 17
+
+        # As of July 1, 2024: 18 years old
+        age_jul1 = EligibilityEngine.calculate_age(dob, reference_date=date(2024, 7, 1))
+        assert age_jul1 == 18
 
     def test_invalid_and_future_dates(self):
         ref_today = date(2026, 10, 31)
@@ -113,27 +154,70 @@ class TestEligibilityEngineOperatorsAndSafety:
         result_ws = EligibilityEngine.evaluate_condition(cond_whitespace, {"occupation": "Farmer"})
         assert result_ws.status == "not_satisfied"
 
-    def test_invalid_types_for_numeric_operators(self):
-        """Non-numeric string values with numeric operators must fail safely without crash."""
-        cond_num = EligibilityCondition(condition_name="Income", field="annual_family_income", operator="lte", expected_value=200000, explanation="Limit")
-        # Actual is invalid string
-        res = EligibilityEngine.evaluate_condition(cond_num, {"annual_family_income": "invalid_number_abc"})
-        assert res.status == "not_satisfied"
-        assert "Non-numeric" in res.explanation
+    def test_invalid_actual_values_for_numeric_operators(self):
+        """Invalid actual citizen profile values (non-numeric string, NaN, Inf) must return unknown, never not_satisfied."""
+        cond_num = EligibilityCondition(
+            condition_name="Income Limit",
+            field="annual_family_income",
+            operator="lte",
+            expected_value=200000,
+            explanation="Income limit",
+        )
 
-    def test_unsupported_operator_and_missing_expected(self):
-        """Unsupported operator or missing expected value returns unknown status."""
-        # Unsupported operator
+        # 1. Non-numeric string in profile
+        res_str = EligibilityEngine.evaluate_condition(cond_num, {"annual_family_income": "invalid_number_abc"})
+        assert res_str.status == "unknown"
+        assert "Cannot evaluate condition" in res_str.explanation
+
+        # 2. NaN in profile
+        res_nan = EligibilityEngine.evaluate_condition(cond_num, {"annual_family_income": float("nan")})
+        assert res_nan.status == "unknown"
+        assert "Cannot evaluate condition" in res_nan.explanation
+
+        # 3. Infinity in profile
+        res_inf = EligibilityEngine.evaluate_condition(cond_num, {"annual_family_income": float("inf")})
+        assert res_inf.status == "unknown"
+        assert "Cannot evaluate condition" in res_inf.explanation
+
+    def test_invalid_expected_values_for_numeric_operators(self):
+        """Invalid scheme rule expected values (None, non-numeric, NaN, Inf) must return unknown rule error, never not_satisfied."""
+        # 1. Null expected value
+        cond_null = {"condition_name": "Test Null", "field": "age", "operator": "gte", "expected_value": None, "explanation": "Null rule"}
+        res_null = EligibilityEngine.evaluate_condition(cond_null, {"age": 25})
+        assert res_null.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_null.explanation
+
+        # 2. Non-numeric string expected value for numeric op
+        cond_str = {"condition_name": "Test Str", "field": "age", "operator": "gte", "expected_value": "not_a_number", "explanation": "Bad rule"}
+        res_str = EligibilityEngine.evaluate_condition(cond_str, {"age": 25})
+        assert res_str.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_str.explanation
+
+        # 3. NaN expected value
+        cond_nan = {"condition_name": "Test NaN", "field": "age", "operator": "gte", "expected_value": float("nan"), "explanation": "NaN rule"}
+        res_nan = EligibilityEngine.evaluate_condition(cond_nan, {"age": 25})
+        assert res_nan.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_nan.explanation
+
+        # 4. Infinity expected value
+        cond_inf = {"condition_name": "Test Inf", "field": "age", "operator": "gte", "expected_value": float("inf"), "explanation": "Inf rule"}
+        res_inf = EligibilityEngine.evaluate_condition(cond_inf, {"age": 25})
+        assert res_inf.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_inf.explanation
+
+    def test_in_operator_invalid_rule_configuration(self):
+        """Expected value for 'in' operator must be a collection; non-collection returns unknown rule error."""
+        cond_in_bad = {"condition_name": "Category In", "field": "category", "operator": "in", "expected_value": 12345, "explanation": "Invalid in"}
+        res_in = EligibilityEngine.evaluate_condition(cond_in_bad, {"category": "General"})
+        assert res_in.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_in.explanation
+
+    def test_unsupported_operator(self):
+        """Unsupported operator returns unknown status."""
         cond_bad_op = {"condition_name": "Test", "field": "age", "operator": "regex", "expected_value": "^18$", "explanation": "Regex"}
         res_op = EligibilityEngine.evaluate_condition(cond_bad_op, {"age": 18})
         assert res_op.status == "unknown"
         assert "Unsupported operator" in res_op.explanation
-
-        # None expected value
-        cond_none_exp = {"condition_name": "Test", "field": "age", "operator": "gte", "expected_value": None, "explanation": "Null expected"}
-        res_none = EligibilityEngine.evaluate_condition(cond_none_exp, {"age": 18})
-        assert res_none.status == "unknown"
-        assert "Invalid rule" in res_none.explanation
 
     def test_missing_profile_field_classified_as_unknown(self):
         """A missing profile field must be classified as unknown, not automatically failed."""
@@ -357,3 +441,50 @@ class TestSchemeAssessmentAndRecommendations:
         # Citizen B attempts to access Citizen A's assessment detail -> must be 404
         res_cross = client.get(f"/api/v1/schemes/assessments/{assessment_a_id}", headers=headers_b)
         assert res_cross.status_code == 404
+
+
+class TestSchemeSourceMetadataVerification:
+    """Verify official sources, application URLs, references, freshness, and demo markers."""
+
+    def test_seeded_schemes_source_metadata_completeness(self):
+        from app.services.scheme_service import DEMO_SCHEMES_SEED
+
+        assert len(DEMO_SCHEMES_SEED) == 5
+
+        for s in DEMO_SCHEMES_SEED:
+            # 1. Marked as DEMO data
+            assert s["is_demo_data"] is True
+            assert "[DEMO]" in s["scheme_name"]
+
+            # 2. Official URLs present and valid
+            assert s["official_source_url"].startswith("https://")
+            assert s["official_application_url"].startswith("https://")
+
+            # 3. Source references present and non-empty
+            assert s["eligibility_source_reference"] is not None
+            assert len(s["eligibility_source_reference"].strip()) > 10
+
+            assert s["benefits_source_reference"] is not None
+            assert len(s["benefits_source_reference"].strip()) > 10
+
+            # 4. Freshness and verification details
+            assert s["source_freshness_status"] == "Verified Official Source (Demo Seed)"
+            assert isinstance(s["source_last_verified_at"], datetime)
+            assert "DEMO / TEST DATA" in s["source_verification_details"]
+
+    def test_scheme_detail_api_exposes_source_verification_metadata(self, client):
+        pm_kisan_id = "11111111-1111-1111-1111-111111111111"
+        res = client.get(f"/api/v1/schemes/{pm_kisan_id}")
+        assert res.status_code == 200
+        data = res.json()
+
+        assert data["id"] == pm_kisan_id
+        assert data["is_demo_data"] is True
+        assert data["official_source_url"] == "https://pmkisan.gov.in/"
+        assert data["official_application_url"] == "https://pmkisan.gov.in/RegistrationFormNew.aspx"
+        assert data["source_freshness_status"] == "Verified Official Source (Demo Seed)"
+        assert "PM-KISAN Operational Guidelines" in data["eligibility_source_reference"]
+        assert "PM-KISAN Operational Guidelines" in data["benefits_source_reference"]
+        assert "DEMO / TEST DATA" in data["source_verification_details"]
+        assert data["source_last_verified_at"] is not None
+        assert "JanMitra Assist is an advisory preparation platform" in data["advisory_notice"]

@@ -45,6 +45,9 @@ class SchemeBase(BaseModel):
     official_source_url: str
     official_application_url: str
     source_last_verified_at: Optional[datetime] = None
+    source_freshness_status: str = "Verified Official Source"
+    eligibility_source_reference: Optional[str] = None
+    benefits_source_reference: Optional[str] = None
     source_verification_details: Optional[str] = None
     status: str = "active"
     is_active: bool = True

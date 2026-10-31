@@ -106,6 +106,22 @@ class Scheme(Base):
         nullable=True,
         comment="Timestamp when scheme source information was last verified",
     )
+    source_freshness_status = Column(
+        String(50),
+        nullable=False,
+        default="Verified Official Source",
+        comment="Verification freshness status: 'Verified Official Source', 'Pending Verification', etc.",
+    )
+    eligibility_source_reference = Column(
+        String(500),
+        nullable=True,
+        comment="Supporting official source reference for eligibility rules",
+    )
+    benefits_source_reference = Column(
+        String(500),
+        nullable=True,
+        comment="Supporting official source reference for scheme benefits",
+    )
     source_verification_details = Column(
         Text,
         nullable=True,

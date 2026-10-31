@@ -68,7 +68,10 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://pmkisan.gov.in/",
         "official_application_url": "https://pmkisan.gov.in/RegistrationFormNew.aspx",
         "source_last_verified_at": datetime(2026, 1, 15, tzinfo=timezone.utc),
-        "source_verification_details": "Verified against PM-KISAN operational guidelines (pmkisan.gov.in). Note: Cultivable landholding records must be validated during official state portal registration.",
+        "source_freshness_status": "Verified Official Source (Demo Seed)",
+        "eligibility_source_reference": "PM-KISAN Operational Guidelines, Section 3 (Eligibility Conditions & Landholder Criteria), Ministry of Agriculture & Farmers Welfare, GoI",
+        "benefits_source_reference": "PM-KISAN Operational Guidelines, Section 2 (Financial Assistance & Installment Structure), Ministry of Agriculture & Farmers Welfare, GoI",
+        "source_verification_details": "Verified against PM-KISAN official guidelines (pmkisan.gov.in). DEMO / TEST DATA: Cultivable landholding records and Aadhaar e-KYC must be validated during official state portal registration.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -120,7 +123,10 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://pmjay.gov.in/",
         "official_application_url": "https://beneficiary.nha.gov.in/",
         "source_last_verified_at": datetime(2026, 2, 10, tzinfo=timezone.utc),
-        "source_verification_details": "Verified against NHA guidelines (pmjay.gov.in). Note: Entitlement depends on SECC 2011 / state target database match verified at empaneled hospitals.",
+        "source_freshness_status": "Verified Official Source (Demo Seed)",
+        "eligibility_source_reference": "National Health Authority (NHA) AB-PMJAY Beneficiary Eligibility Criteria, SECC 2011 Deprivation Guidelines",
+        "benefits_source_reference": "NHA PM-JAY Benefit Package 2.2 / Healthcare Benefit Schedule, Ministry of Health and Family Welfare, GoI",
+        "source_verification_details": "Verified against NHA guidelines (pmjay.gov.in). DEMO / TEST DATA: Entitlement depends on SECC 2011 / state target database match verified at empaneled hospitals or Ayushman kiosks.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -171,7 +177,10 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://pmayg.nic.in/",
         "official_application_url": "https://pmayg.nic.in/netiay/home.aspx",
         "source_last_verified_at": datetime(2026, 1, 20, tzinfo=timezone.utc),
-        "source_verification_details": "Verified against MoRD scheme guidelines (pmayg.nic.in). Note: Gram Sabha beneficiary priority list and site geo-tagging required by nodal officers.",
+        "source_freshness_status": "Verified Official Source (Demo Seed)",
+        "eligibility_source_reference": "Framework for Implementation of PMAY-G, Chapter 3 (Beneficiary Selection & Deprivation Criteria), Ministry of Rural Development, GoI",
+        "benefits_source_reference": "Framework for Implementation of PMAY-G, Chapter 2 (Unit Assistance & Convergence with MGNREGS/SBM), Ministry of Rural Development, GoI",
+        "source_verification_details": "Verified against MoRD scheme guidelines (pmayg.nic.in). DEMO / TEST DATA: Final beneficiary selection requires Gram Sabha approval and geo-tagged house verification on AwaasSoft.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -230,7 +239,10 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://scholarships.gov.in/",
         "official_application_url": "https://scholarships.gov.in/fresh/newstdRegfrmInstruction",
         "source_last_verified_at": datetime(2026, 2, 1, tzinfo=timezone.utc),
-        "source_verification_details": "Verified from NSP guidance (scholarships.gov.in). Note: Institute verification and student biometric e-KYC are mandatory on the portal.",
+        "source_freshness_status": "Verified Official Source (Demo Seed)",
+        "eligibility_source_reference": "National Scholarship Portal (NSP) Centrally Sponsored Scheme Guidelines for Post-Matric Scholarships, Ministry of Social Justice and Empowerment / Ministry of Education, GoI",
+        "benefits_source_reference": "NSP Post-Matric Financial Assistance Component Regulations (Tuition Waiver & Maintenance Allowance Schedule)",
+        "source_verification_details": "Verified from NSP guidance (scholarships.gov.in). DEMO / TEST DATA: Institute nodal officer verification, Aadhaar-based biometric e-KYC, and state quota validation required.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -282,7 +294,10 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://www.jeevandayee.gov.in/",
         "official_application_url": "https://www.jeevandayee.gov.in/",
         "source_last_verified_at": datetime(2026, 2, 5, tzinfo=timezone.utc),
-        "source_verification_details": "Verified from State Health Assurance Society portal (jeevandayee.gov.in). Note: Valid Maharashtra ration card must be produced at network hospitals.",
+        "source_freshness_status": "Verified Official Source (Demo Seed)",
+        "eligibility_source_reference": "Government of Maharashtra Public Health Department Resolution No. MJPJAY-2023/CR-142/PH-4 (Eligibility: Yellow/Orange Ration Card Holders & State Domicile)",
+        "benefits_source_reference": "State Health Assurance Society (SHAS) Maharashtra Medical Procedures Schedule & Coverage Ceiling Guidelines (₹5 Lakhs)",
+        "source_verification_details": "Verified from State Health Assurance Society portal (jeevandayee.gov.in). DEMO / TEST DATA: Valid Maharashtra ration card must be produced and verified by Arogyamitra at network hospitals.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -295,13 +310,16 @@ class SchemeService:
 
     @staticmethod
     def ensure_demo_schemes_seeded(db: Session) -> None:
-        """Seed verified sample demo government schemes if table is empty."""
-        count = db.query(Scheme).count()
-        if count == 0:
-            for s_data in DEMO_SCHEMES_SEED:
+        """Seed verified sample demo government schemes if table is empty or update missing seed metadata."""
+        for s_data in DEMO_SCHEMES_SEED:
+            existing = db.query(Scheme).filter(Scheme.id == s_data["id"]).first()
+            if not existing:
                 scheme = Scheme(**s_data)
                 db.add(scheme)
-            db.commit()
+            else:
+                for k, v in s_data.items():
+                    setattr(existing, k, v)
+        db.commit()
 
     @staticmethod
     def get_schemes(

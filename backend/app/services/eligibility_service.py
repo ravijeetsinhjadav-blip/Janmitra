@@ -24,12 +24,32 @@ class EligibilityEngine:
     def calculate_age(
         dob_val: Any,
         reference_date: Optional[date] = None,
+        feb29_convention: str = "statutory_anniversary",
     ) -> Optional[int]:
         """Derive citizen age from YYYY-MM-DD date of birth or date object.
         
-        Correctly accounts for leap years, future dates, and birthday boundaries:
-        - On the birthday anniversary, age increments by 1.
-        - The day before the birthday anniversary, age is still (years - 1).
+        Parameters:
+        - dob_val: Date of birth as date, datetime, or ISO string.
+        - reference_date: Official scheme cutoff date (defaults to date.today()).
+          Different government notifications specify distinct cutoff dates
+          (e.g., January 1, July 1, or application closing date) rather than the
+          dynamic date of form submission.
+        - feb29_convention: Handling of February 29 birthdays in common (non-leap) years:
+          * 'statutory_anniversary' (default): Common law / Indian statutory convention
+            (e.g., General Clauses Act, Section 9). A person legally attains a given age
+            on the day following the completion of 365 days. In a non-leap year of 28
+            days, 365 full days elapse at midnight on Feb 28, meaning the statutory
+            anniversary is attained on March 1.
+          * 'end_of_february': Administrative convention used by certain departments
+            where a person born on Feb 29 is deemed to have completed that year by the
+            close of February (February 28 in common years).
+            
+        Note on Statutory & Administrative Conventions:
+        No single leap-year convention is universally applicable to all government
+        departments and schemes across central and state jurisdictions. By providing
+        both 'statutory_anniversary' and 'end_of_february' conventions alongside
+        configurable scheme reference cutoff dates, the engine respects scheme-specific
+        statutory rules.
         """
         if not dob_val:
             return None
@@ -45,9 +65,19 @@ class EligibilityEngine:
             if dob > today:
                 return None  # Future birth date is invalid
 
-            # Statutory anniversary calculation:
-            # ((today.month, today.day) < (dob.month, dob.day)) is True if birthday has not yet occurred this year
-            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            # Check leap year status for reference year
+            is_ref_leap_year = (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0))
+            is_feb29_dob = (dob.month == 2 and dob.day == 29)
+
+            if is_feb29_dob and not is_ref_leap_year and feb29_convention == "end_of_february":
+                # Administrative convention: birthday deemed to occur on Feb 28 in common years
+                has_birthday_occurred = (today.month, today.day) >= (2, 28)
+            else:
+                # Statutory anniversary (or normal birth date):
+                # In common years, Feb 29 birthday is reached on March 1 because (2, 28) < (2, 29)
+                has_birthday_occurred = (today.month, today.day) >= (dob.month, dob.day)
+
+            age = today.year - dob.year - (0 if has_birthday_occurred else 1)
             if age < 0 or age > 130:
                 return None
             return age
@@ -55,11 +85,17 @@ class EligibilityEngine:
             return None
 
     @classmethod
-    def extract_profile_facts(cls, profile: Optional[UserProfile]) -> Dict[str, Any]:
+    def extract_profile_facts(
+        cls,
+        profile: Optional[UserProfile],
+        reference_date: Optional[date] = None,
+        feb29_convention: str = "statutory_anniversary",
+    ) -> Dict[str, Any]:
         """Extract evaluation facts dictionary from Citizen UserProfile."""
         if not profile:
             return {
                 "age": None,
+                "date_of_birth": None,
                 "state": None,
                 "district": None,
                 "residence_type": None,
@@ -69,9 +105,14 @@ class EligibilityEngine:
                 "category": None,
             }
 
-        age = cls.calculate_age(profile.date_of_birth)
+        age = cls.calculate_age(
+            profile.date_of_birth,
+            reference_date=reference_date,
+            feb29_convention=feb29_convention,
+        )
         return {
             "age": age,
+            "date_of_birth": profile.date_of_birth,
             "state": profile.state.strip() if profile.state else None,
             "district": profile.district.strip() if profile.district else None,
             "residence_type": profile.residence_type.strip().lower() if profile.residence_type else None,
@@ -90,10 +131,12 @@ class EligibilityEngine:
         """Evaluate a single rule condition against extracted citizen facts.
         
         Requirements:
-        - Safely handle null and missing profile values (classified as unknown).
-        - Safely validate expected types and prevent arbitrary code execution.
-        - Prefer normalized exact matching for controlled fields (residence_type, state).
-        - Handle invalid types gracefully without throwing unhandled exceptions.
+        - Distinguish invalid scheme rules from missing citizen profile facts.
+        - Invalid scheme configuration values (null, NaN, Inf, non-numeric) return safe 'unknown'
+          with explicit rule-configuration error, NEVER penalizing a citizen as 'not_satisfied'.
+        - Missing profile fields return 'unknown' (missing from profile).
+        - Invalid citizen profile values for numeric operators return 'unknown'.
+        - Deterministically evaluate satisfied vs not_satisfied when types and values are valid.
         """
         if hasattr(condition, "model_dump"):
             condition = condition.model_dump()
@@ -108,6 +151,21 @@ class EligibilityEngine:
 
         actual = facts.get(field)
 
+        # Support scheme-specific reference cutoff date or convention for age
+        if field == "age" and ("cutoff_date" in condition or "reference_date" in condition):
+            cutoff_raw = condition.get("cutoff_date") or condition.get("reference_date")
+            conv = condition.get("feb29_convention", "statutory_anniversary")
+            dob_source = facts.get("date_of_birth")
+            if dob_source and cutoff_raw:
+                try:
+                    c_date = (
+                        cutoff_raw if isinstance(cutoff_raw, date)
+                        else datetime.strptime(str(cutoff_raw).strip()[:10], "%Y-%m-%d").date()
+                    )
+                    actual = cls.calculate_age(dob_source, reference_date=c_date, feb29_convention=conv)
+                except Exception:
+                    pass
+
         # 1. Validate operator support
         if op not in cls.SUPPORTED_OPERATORS:
             return ConditionEvaluation(
@@ -120,7 +178,7 @@ class EligibilityEngine:
                 explanation=f"Unsupported operator '{op}'. Condition cannot be deterministically evaluated.",
             )
 
-        # 2. Validate expected value presence
+        # 2. Validate expected value presence & validity (Scheme Rule Configuration)
         if expected is None:
             return ConditionEvaluation(
                 condition_name=cond_name,
@@ -129,10 +187,48 @@ class EligibilityEngine:
                 expected_value=expected,
                 actual_value=actual,
                 status="unknown",
-                explanation=f"Invalid rule definition: expected value for '{cond_name}' is not defined.",
+                explanation=f"Invalid scheme rule configuration: expected value for criterion '{cond_name}' is undefined (null).",
             )
 
-        # 3. Missing or undefined profile fact -> Classified as UNKNOWN, never auto-failed
+        # 3. Numeric operator rule configuration validation (expected must be finite float)
+        num_expected: Optional[float] = None
+        if op in ("gt", "gte", "lt", "lte"):
+            try:
+                num_expected = float(expected)
+                if math.isnan(num_expected) or math.isinf(num_expected):
+                    return ConditionEvaluation(
+                        condition_name=cond_name,
+                        field=field,
+                        operator=op,
+                        expected_value=expected,
+                        actual_value=actual,
+                        status="unknown",
+                        explanation=f"Invalid scheme rule configuration: expected value '{expected}' is not a finite number (NaN/Infinity).",
+                    )
+            except (ValueError, TypeError):
+                return ConditionEvaluation(
+                    condition_name=cond_name,
+                    field=field,
+                    operator=op,
+                    expected_value=expected,
+                    actual_value=actual,
+                    status="unknown",
+                    explanation=f"Invalid scheme rule configuration: expected value '{expected}' cannot be parsed as a number for operator '{op}'.",
+                )
+
+        # 4. Collection operator rule configuration validation
+        if op == "in" and not isinstance(expected, (list, tuple, set, str)):
+            return ConditionEvaluation(
+                condition_name=cond_name,
+                field=field,
+                operator=op,
+                expected_value=expected,
+                actual_value=actual,
+                status="unknown",
+                explanation=f"Invalid scheme rule configuration: expected value for 'in' operator must be a collection, got {type(expected).__name__}.",
+            )
+
+        # 5. Missing or unrecorded profile fact -> UNKNOWN (Missing from profile)
         if actual is None:
             return ConditionEvaluation(
                 condition_name=cond_name,
@@ -144,7 +240,33 @@ class EligibilityEngine:
                 explanation=f"{base_explanation} (Missing from citizen profile: '{field}'; cannot be verified).",
             )
 
-        # 4. Operator evaluation with strict type safety
+        # 6. Numeric operator profile value validation (actual must be finite float)
+        num_actual: Optional[float] = None
+        if op in ("gt", "gte", "lt", "lte"):
+            try:
+                num_actual = float(actual)
+                if math.isnan(num_actual) or math.isinf(num_actual):
+                    return ConditionEvaluation(
+                        condition_name=cond_name,
+                        field=field,
+                        operator=op,
+                        expected_value=expected,
+                        actual_value=actual,
+                        status="unknown",
+                        explanation=f"Cannot evaluate condition: citizen profile field '{field}' contains an invalid numeric value (NaN/Infinity).",
+                    )
+            except (ValueError, TypeError):
+                return ConditionEvaluation(
+                    condition_name=cond_name,
+                    field=field,
+                    operator=op,
+                    expected_value=expected,
+                    actual_value=actual,
+                    status="unknown",
+                    explanation=f"Cannot evaluate condition: citizen profile field '{field}' with value '{actual}' is not a valid number.",
+                )
+
+        # 7. Operator evaluation with strict type safety
         is_satisfied = False
         eval_note = ""
 
@@ -161,7 +283,19 @@ class EligibilityEngine:
                         is_satisfied = act_norm == exp_norm
                 elif isinstance(actual, (int, float)) and isinstance(expected, (int, float, str)):
                     try:
-                        is_satisfied = float(actual) == float(expected)
+                        f_act = float(actual)
+                        f_exp = float(expected)
+                        if math.isnan(f_act) or math.isnan(f_exp) or math.isinf(f_act) or math.isinf(f_exp):
+                            return ConditionEvaluation(
+                                condition_name=cond_name,
+                                field=field,
+                                operator=op,
+                                expected_value=expected,
+                                actual_value=actual,
+                                status="unknown",
+                                explanation=f"Cannot evaluate '{op}' comparison with NaN or Infinity value.",
+                            )
+                        is_satisfied = f_act == f_exp
                     except (ValueError, TypeError):
                         is_satisfied = False
                 else:
@@ -172,31 +306,34 @@ class EligibilityEngine:
                     is_satisfied = actual.strip().casefold() != expected.strip().casefold()
                 elif isinstance(actual, (int, float)) and isinstance(expected, (int, float, str)):
                     try:
-                        is_satisfied = float(actual) != float(expected)
+                        f_act = float(actual)
+                        f_exp = float(expected)
+                        if math.isnan(f_act) or math.isnan(f_exp) or math.isinf(f_act) or math.isinf(f_exp):
+                            return ConditionEvaluation(
+                                condition_name=cond_name,
+                                field=field,
+                                operator=op,
+                                expected_value=expected,
+                                actual_value=actual,
+                                status="unknown",
+                                explanation=f"Cannot evaluate '{op}' comparison with NaN or Infinity value.",
+                            )
+                        is_satisfied = f_act != f_exp
                     except (ValueError, TypeError):
                         is_satisfied = True
                 else:
                     is_satisfied = actual != expected
 
             elif op in ("gt", "gte", "lt", "lte"):
-                # Validate numeric types safely
-                try:
-                    num_actual = float(actual)
-                    num_expected = float(expected)
-                    if math.isnan(num_actual) or math.isnan(num_expected) or math.isinf(num_actual) or math.isinf(num_expected):
-                        is_satisfied = False
-                        eval_note = "Invalid numeric value (NaN/Infinity)."
-                    elif op == "gt":
-                        is_satisfied = num_actual > num_expected
-                    elif op == "gte":
-                        is_satisfied = num_actual >= num_expected
-                    elif op == "lt":
-                        is_satisfied = num_actual < num_expected
-                    elif op == "lte":
-                        is_satisfied = num_actual <= num_expected
-                except (ValueError, TypeError):
-                    is_satisfied = False
-                    eval_note = f"Non-numeric comparison: cannot compare actual '{actual}' with expected '{expected}'."
+                assert num_actual is not None and num_expected is not None
+                if op == "gt":
+                    is_satisfied = num_actual > num_expected
+                elif op == "gte":
+                    is_satisfied = num_actual >= num_expected
+                elif op == "lt":
+                    is_satisfied = num_actual < num_expected
+                elif op == "lte":
+                    is_satisfied = num_actual <= num_expected
 
             elif op == "in":
                 # Expected must be a collection of valid values
@@ -258,13 +395,19 @@ class EligibilityEngine:
         cls,
         scheme: Scheme,
         profile: Optional[UserProfile],
+        reference_date: Optional[date] = None,
+        feb29_convention: str = "statutory_anniversary",
     ) -> Dict[str, Any]:
         """Perform comprehensive deterministic assessment of a scheme for a citizen profile.
         
         Calculates Criteria Match Percentage representing the proportion of verified conditions satisfied.
         This is an advisory metric and NOT an official government approval likelihood.
         """
-        facts = cls.extract_profile_facts(profile)
+        facts = cls.extract_profile_facts(
+            profile,
+            reference_date=reference_date,
+            feb29_convention=feb29_convention,
+        )
         criteria: List[Dict[str, Any]] = scheme.eligibility_criteria or []
 
         # If scheme has geographical state applicability and no state rule, add default state check

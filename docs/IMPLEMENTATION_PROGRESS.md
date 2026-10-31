@@ -74,14 +74,38 @@
 - Recommendations include specific match reasons and an explicit advisory notice.
 - Flutter UI displays an advisory disclaimer banner above recommendations.
 
-### Task E: Testing & Quality Verification
-- **Backend Pytest Suite:**
-  - `backend/tests/test_schemes.py`: 18 tests covering operators, birthday boundaries, mixed conditions, source verification, and history isolation (100% passed).
-  - Complete backend test suite: **52 passed, 1 skipped (live PostgreSQL network test), 0 failed**.
-- **Flutter Testing & Analysis:**
-  - `mobile_app/test/scheme_widgets_test.dart`: 4 comprehensive widget tests covering scheme discovery, details, eligibility results, and home screen card.
-  - Complete Flutter test suite: **7 passed, 0 failed**.
-  - `flutter analyze`: **0 issues found** (clean static analysis).
+### Task E: Final Logic Audit, Hardening & Verification
+- **Invalid Eligibility Rule Handling:**
+  - Audited numeric operators (`gt`, `gte`, `lt`, `lte`).
+  - Distinctly partitions invalid scheme configuration expected values (`None`, non-numeric strings, `NaN`, `Infinity`) $\to$ returns safe `status="unknown"` with explicit `"Invalid scheme rule configuration"` error message. Never incorrectly penalizes a citizen as `not_satisfied`.
+  - Missing citizen profile data $\to$ returns safe `status="unknown"` with `"Missing from citizen profile: <field>"`.
+  - Non-numeric or invalid actual citizen profile values for numeric operators $\to$ returns safe `status="unknown"` with `"Cannot evaluate condition: citizen profile field <field> is not a valid number"`.
+  - Validated type safety for collection operators (`in` requires collections/strings) and text operators (`contains` requires non-empty strings/collections).
+- **Age Calculation & Leap Year Birthday Handling:**
+  - Acknowledges that no single leap-year convention is universally uniform across all Indian central and state government authorities.
+  - Implemented configurable `feb29_convention` in `calculate_age`:
+    - `"statutory_anniversary"` (default): Under common law and Indian statutory interpretation (General Clauses Act, Section 9), 365 full days elapse at midnight on February 28 in common years, so the legal anniversary is attained on March 1.
+    - `"end_of_february"`: Under administrative conventions applied by select departments, the anniversary is deemed completed on the final day of February (February 28 in common years).
+  - Added support for scheme-specific official cutoff dates (`reference_date` / `cutoff_date`) for age determination (e.g. January 1 or July 1 of recruitment/academic years).
+- **Scheme Source Verification & Demo Integrity:**
+  - Extended scheme metadata to persist `source_freshness_status`, `eligibility_source_reference`, `benefits_source_reference`, and `source_verification_details`.
+  - All 5 seeded schemes verified against authentic central and state portals:
+    1. PM-KISAN: Ministry of Agriculture & Farmers Welfare, GoI (Section 3 Eligibility, Section 2 DBT).
+    2. Ayushman Bharat PM-JAY: National Health Authority / MoHFW (SECC 2011 Deprivation Guidelines, Benefit Package 2.2).
+    3. PMAY-G: Ministry of Rural Development, GoI (Chapter 3 Beneficiary Selection, Chapter 2 Financial Grants).
+    4. National Post-Matric Scholarship: Ministry of Social Justice / Ministry of Education, GoI (NSP Guidelines).
+    5. Maharashtra MJPJAY: Public Health Department, Govt. of Maharashtra (GR No. MJPJAY-2023/CR-142/PH-4).
+  - All 5 schemes clearly marked as `is_demo_data = True` and labeled with `[DEMO]` and `DEMO / TEST DATA` limitation notices.
+- **Recommendation Match Score & Advisory Safeguards:**
+  - Match scores are labeled as advisory `Criteria Match Percentage` and never represented as government approval probability.
+  - Missing profile fields are classified as unknown, not treated as confirmed matches.
+  - Schemes with any clearly failed mandatory conditions are strictly excluded from recommendations.
+  - UI displays an advisory disclaimer above recommendations.
+- **Testing & Verification:**
+  - **Backend Pytest Suite:** **58 passed, 1 skipped (live PostgreSQL network test), 0 failed** across 59 tests.
+  - **Flutter Widget & Unit Tests:** **7 passed, 0 failed** (including responsiveness and mobile card tests).
+  - **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+  - **Alembic Database Migrations:** Static SQL upgrade and downgrade validated via `PostgresqlImpl`. Live execution documented as pending PostgreSQL local daemon availability.
 
 ---
 

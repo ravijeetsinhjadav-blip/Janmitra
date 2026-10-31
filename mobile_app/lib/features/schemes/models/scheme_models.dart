@@ -81,6 +81,9 @@ class SchemeModel {
   final String officialSourceUrl;
   final String officialApplicationUrl;
   final String? sourceLastVerifiedAt;
+  final String sourceFreshnessStatus;
+  final String? eligibilitySourceReference;
+  final String? benefitsSourceReference;
   final String? sourceVerificationDetails;
   final String status;
   final bool isDemoData;
@@ -102,6 +105,9 @@ class SchemeModel {
     required this.officialSourceUrl,
     required this.officialApplicationUrl,
     this.sourceLastVerifiedAt,
+    this.sourceFreshnessStatus = 'Verified Official Source',
+    this.eligibilitySourceReference,
+    this.benefitsSourceReference,
     this.sourceVerificationDetails,
     required this.status,
     required this.isDemoData,
@@ -140,6 +146,9 @@ class SchemeModel {
       officialSourceUrl: json['official_source_url'] as String? ?? '',
       officialApplicationUrl: json['official_application_url'] as String? ?? '',
       sourceLastVerifiedAt: json['source_last_verified_at'] as String?,
+      sourceFreshnessStatus: json['source_freshness_status'] as String? ?? 'Verified Official Source',
+      eligibilitySourceReference: json['eligibility_source_reference'] as String?,
+      benefitsSourceReference: json['benefits_source_reference'] as String?,
       sourceVerificationDetails: json['source_verification_details'] as String?,
       status: json['status'] as String? ?? 'active',
       isDemoData: json['is_demo_data'] as bool? ?? false,
