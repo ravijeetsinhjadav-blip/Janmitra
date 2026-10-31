@@ -2,7 +2,7 @@
 
 **Project Name:** JanMitra Assist – AI-Powered Government Service Eligibility and Document Intelligence System  
 **Academic Target:** MCA Major Project  
-**Current Phase:** Phase 7.1 (Application Assistance Module) – COMPLETED & VERIFIED
+**Current Phase:** Phase 7.2 (Assisted Service & Payments Module) – COMPLETED & VERIFIED
 
 
 ---
@@ -390,5 +390,75 @@
 
 ---
 
-- [ ] **Phase 7.2:** Assisted Service, Subscription & Payment Integration (PENDING USER INITIATION)
+---
+
+## 3. Phase 7.2 Implementation: Assisted Service & Payments Module
+
+### Task A: Data Models & Database Migrations
+- Created `PaymentTransaction` database model in `backend/app/models/payment.py`:
+  - Columns: `id` (UUID pk), `user_id` (FK users), `subscription_id` (FK subscriptions, nullable), `razorpay_order_id` (unique), `razorpay_payment_id` (unique, nullable), `razorpay_signature`, `amount`, `currency` (INR), `plan_type` (premium), `billing_cycle` (monthly/yearly), `payment_status` (created, captured, failed, refunded), `payment_method` (upi, card, netbanking, qr), `error_code`, `error_description`, `idempotency_key` (unique), `payment_metadata` (JSONB), `created_at`, `updated_at`.
+  - Added relationships in `User` and `Subscription` models (`user.payments`, `subscription.payments`).
+- Authored Alembic migration `b2c3d4e5f6a7_add_phase_7_2_payment_transactions.py`.
+- Verified static SQL compilation for PostgreSQL via `alembic upgrade head --sql` confirming foreign keys, indexes, and column comments.
+
+### Task B: Cryptographic Payment Gateway & Security Service
+- Implemented `PaymentService` in `backend/app/services/payment_service.py`:
+  - **Secure Order Creation:** Generates Razorpay orders with server-controlled amount (₹99 for monthly, ₹799 for yearly) in paise; prevents client price tampering.
+  - **Cryptographic Signature Verification:** Computes HMAC-SHA256 signature using `RAZORPAY_KEY_SECRET` over `${order_id}|${payment_id}` and compares using timing-attack safe `hmac.compare_digest`.
+  - **Idempotent Webhook Processing:** Validates Razorpay webhook signatures via `RAZORPAY_WEBHOOK_SECRET`; enforces uniqueness on `idempotency_key` (`webhook_event_id` or `payment_id:event`) to prevent replay attacks and duplicate subscription extensions.
+  - **Failure Handling:** Captures `payment.failed` webhooks and records error codes and descriptions while leaving subscription state untouched.
+  - **Dev Mode Emulation:** In development/testing environments (`RAZORPAY_DEV_MODE=True`), simulates order creation and signature verification without calling external APIs.
+
+### Task C: Subscription Lifecycle & Quota Enforcement
+- Implemented `SubscriptionService` in `backend/app/services/subscription_service.py`:
+  - **Plan Catalog:** Free Plan (₹0) and Premium Plan (₹99/month, ₹799/year - 33% discount).
+  - **Quota Calculation:**
+    - Free Plan: Up to 3 document analyses/month and 5 AI guidance sessions/month.
+    - Premium Plan: Up to 30 document analyses/month and 100 AI guidance sessions/month.
+    - Calendar-month dynamic calculation: computes usage from `DocumentMetadata` and `Assessment` records created within the current calendar month cycle.
+  - **Quota Guards:**
+    - `POST /api/v1/documents/upload` enforces `enforce_document_analysis_quota`: returns HTTP 403 Forbidden with detailed upgrade requirement when monthly quota is exhausted.
+    - `POST /api/v1/advisory/schemes/{scheme_id}/assess` enforces `enforce_ai_guidance_quota`: returns HTTP 403 Forbidden when guidance sessions are exhausted.
+  - **Activation & Extension:** Updates existing active subscriptions or provisions new ones with accurate start/end dates (30 days for monthly, 365 days for yearly).
+
+### Task D: API Endpoints
+- Mounted endpoints in `backend/app/api/v1/endpoints/`:
+  - `GET /api/v1/subscriptions/plans`: Public subscription plans catalog.
+  - `GET /api/v1/subscriptions/me`: Authenticated citizen's current subscription, status, validity, and remaining usage quotas.
+  - `POST /api/v1/payments/create-order`: Authenticated order generation.
+  - `POST /api/v1/payments/verify`: Authenticated cryptographic signature verification and instant Premium activation.
+  - `POST /api/v1/payments/webhook`: Server-to-server webhook callback with signature validation and idempotency protection.
+  - `GET /api/v1/payments/history`: Authenticated user transaction history.
+
+### Task E: Flutter Mobile Application
+- Built subscription feature under `mobile_app/lib/features/subscription/`:
+  - `models/subscription_models.dart`: JSON models for plans, quotas, citizen subscription, orders, and payment transactions.
+  - `services/subscription_service.dart`: API client methods with JWT token headers.
+  - `presentation/screens/subscription_plans_screen.dart`:
+    - Current plan and active status badge.
+    - Monthly Quota indicators with live progress bars.
+    - Monthly (₹99) vs Annual (₹799, "Save 33%") billing cycle toggle.
+    - Free vs Premium feature comparison cards.
+    - Razorpay payment bottom-sheet modal supporting UPI, QR code, and Debit/Credit cards.
+    - Statutory Non-Government preparation disclaimer notice.
+  - `presentation/screens/payment_success_screen.dart`:
+    - Confirmation receipt with transaction ID, plan tier, validity period, and quota breakdown.
+  - `presentation/screens/payment_failure_screen.dart`:
+    - Failure explanation, order ID, retry button, and support contact navigation.
+  - `presentation/screens/payment_history_screen.dart`:
+    - Chronological list of user transactions with status badges (CAPTURED, FAILED), payment methods, and timestamps.
+- Navigation integration:
+  - Added "JanMitra Premium & Assisted Service" card on `home_screen.dart`.
+
+### Task F: Verification & Quality Assurance
+- **Backend Tests:** **122 passed, 1 skipped (live PostgreSQL), 0 failed** across 123 tests:
+  - 14 dedicated Phase 7.2 tests covering plans catalog, quota calculation, document upload quota enforcement (HTTP 403), AI guidance quota enforcement (HTTP 403), order creation, signature verification, payment activation, webhook processing, webhook idempotency, payment failure handling, and payment history.
+- **Flutter Tests:** All tests passing across `subscription_widgets_test.dart`, `assistance_widgets_test.dart`, `advisory_widgets_test.dart`, `document_widgets_test.dart`, `scheme_widgets_test.dart`, and `widget_test.dart`.
+- **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+- **Database Migrations:** Clean static SQL generation verified via `alembic upgrade head --sql`.
+
+---
+
+- [x] **Phase 7.1:** Application Assistance Module (COMPLETED & VERIFIED)
+- [x] **Phase 7.2:** Assisted Service, Subscription & Payment Integration (COMPLETED & VERIFIED)
 - [ ] **Phase 8:** Final Hardening, Integration & Academic Defense Preparation (PENDING USER INITIATION)

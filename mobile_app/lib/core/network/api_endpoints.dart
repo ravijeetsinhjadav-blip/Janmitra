@@ -47,6 +47,13 @@ class ApiEndpoints {
   static String schemeAssistanceChecklistToggle(String schemeId, String itemId) => '/api/v1/assistance/schemes/$schemeId/checklist/$itemId';
   static String schemeAssistanceGuide(String schemeId) => '/api/v1/assistance/schemes/$schemeId/guide';
 
-  // Future phase endpoints (Phases 7.2-8)
+  // Phase 7.2 Subscriptions & Assisted Payments Module
+  static const String subscriptionsPlans = '/api/v1/subscriptions/plans';
+  static const String subscriptionsMe = '/api/v1/subscriptions/me';
+  static const String paymentsCreateOrder = '/api/v1/payments/create-order';
+  static const String paymentsVerify = '/api/v1/payments/verify';
+  static const String paymentsHistory = '/api/v1/payments/history';
+
+  // Future phase endpoints (Phase 8)
   static const String readiness = '/api/v1/readiness';
 }

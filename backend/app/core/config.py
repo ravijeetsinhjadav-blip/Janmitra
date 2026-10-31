@@ -68,6 +68,19 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = 3
     DEFAULT_ADVISORY_LANGUAGE: str = "en"  # Supported: 'en', 'hi', 'gu'
 
+    # Razorpay Payment & Subscription Settings (Phase 7.2)
+    RAZORPAY_KEY_ID: str = "rzp_test_janmitra_dev_key"
+    RAZORPAY_KEY_SECRET: str = "janmitra_razorpay_secret_dev_32char"
+    RAZORPAY_WEBHOOK_SECRET: str = "janmitra_webhook_secret_dev_32char"
+    RAZORPAY_CURRENCY: str = "INR"
+    RAZORPAY_DEV_MODE: bool = True  # Allows deterministic mock order/verification in dev/test
+
+    # Subscription Quota Limits
+    FREE_MONTHLY_DOC_ANALYSES_LIMIT: int = 3
+    PREMIUM_MONTHLY_DOC_ANALYSES_LIMIT: int = 30
+    FREE_MONTHLY_AI_GUIDANCE_LIMIT: int = 5
+    PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT: int = 100
+
     @property
     def allowed_extensions(self) -> List[str]:
         return [ext.strip().lower().lstrip(".") for ext in self.ALLOWED_DOCUMENT_EXTENSIONS.split(",") if ext.strip()]

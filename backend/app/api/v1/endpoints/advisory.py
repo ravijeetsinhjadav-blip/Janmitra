@@ -7,6 +7,7 @@ from app.core.dependencies import get_current_user, get_current_active_citizen
 from app.models.user import User
 from app.schemas.advisory import AdvisoryAssessmentResponse, AdvisoryRequest
 from app.services.advisory_service import AdvisoryService
+from app.services.subscription_service import SubscriptionService
 
 router = APIRouter(prefix="/advisory", tags=["AI Advisory & Readiness"])
 
@@ -28,7 +29,8 @@ def assess_and_advise(
     current_user: User = Depends(get_current_active_citizen),
     db: Session = Depends(get_db),
 ):
-    """Run assessment and generate comprehensive AI guidance."""
+    """Run assessment and generate comprehensive AI guidance after quota validation."""
+    SubscriptionService.enforce_ai_guidance_quota(db=db, user_id=current_user.id)
     return AdvisoryService.generate_or_get_advisory(
         db=db,
         user_id=current_user.id,
@@ -68,7 +70,8 @@ def regenerate_advisory(
     current_user: User = Depends(get_current_active_citizen),
     db: Session = Depends(get_db),
 ):
-    """Regenerate AI guidance with updated language preference."""
+    """Regenerate AI guidance with updated language preference after quota validation."""
+    SubscriptionService.enforce_ai_guidance_quota(db=db, user_id=current_user.id)
     return AdvisoryService.regenerate_advisory(
         db=db,
         user_id=current_user.id,

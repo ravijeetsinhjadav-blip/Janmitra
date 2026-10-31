@@ -111,3 +111,4 @@ class ApplicationAssistanceResponse(BaseModel):
         "It does NOT replace official government portals or submit applications on your behalf. "
         "Guidance does not guarantee official approval."
     )
+

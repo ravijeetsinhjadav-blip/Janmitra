@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, schemes, users, documents, advisory, assistance
+from app.api.v1.endpoints import auth, schemes, users, documents, advisory, assistance, subscriptions, payments
 
 api_router = APIRouter()
 
@@ -20,6 +20,13 @@ api_router.include_router(advisory.router, tags=["AI Advisory & Readiness"])
 
 # Application Assistance Module (Phase 7.1)
 api_router.include_router(assistance.router, prefix="/assistance", tags=["Application Assistance"])
+
+# Subscriptions & Quota Management (Phase 7.2)
+api_router.include_router(subscriptions.router, tags=["Subscriptions"])
+
+# Assisted Service & Razorpay Payments (Phase 7.2)
+api_router.include_router(payments.router, tags=["Payments & Checkout"])
+
 
 
 
