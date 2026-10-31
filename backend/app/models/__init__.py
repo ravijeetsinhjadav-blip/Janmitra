@@ -5,7 +5,7 @@ from app.models.scheme import Scheme
 from app.models.document import DocumentMetadata
 from app.models.assessment import Assessment
 from app.models.application import Application, APPLICATION_STATUSES
-from app.models.subscription import Subscription, PLAN_TYPES, BILLING_CYCLES
+from app.models.subscription import Subscription, UserMonthlyQuota, PLAN_TYPES, BILLING_CYCLES
 from app.models.notification import Notification
 from app.models.otp import OTPChallenge
 from app.models.session import UserSession
@@ -23,6 +23,7 @@ __all__ = [
     "Application",
     "APPLICATION_STATUSES",
     "Subscription",
+    "UserMonthlyQuota",
     "PLAN_TYPES",
     "BILLING_CYCLES",
     "PaymentTransaction",

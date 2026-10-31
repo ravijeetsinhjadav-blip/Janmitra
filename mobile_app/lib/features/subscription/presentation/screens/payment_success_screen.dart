@@ -91,7 +91,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                       const Divider(height: 16),
                       _buildReceiptRow(
                         'Transaction ID',
-                        verificationResult.transactionId.substring(0, 13) + '...',
+                        '${verificationResult.transactionId.substring(0, 13)}...',
                       ),
                     ],
                   ),

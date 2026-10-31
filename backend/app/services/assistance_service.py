@@ -13,6 +13,7 @@ from app.services.scheme_service import SchemeService
 from app.services.readiness_service import ReadinessService
 from app.services.rag_service import RAGService
 from app.services.llm_service import get_llm_adapter
+from app.services.subscription_service import SubscriptionService
 from app.schemas.assistance import (
     DocumentPreparationStatusItem,
     ChecklistItem,
@@ -271,6 +272,7 @@ class AssistanceService:
             guide_dict = cache[language]
         else:
             logger.info(f"Generating and caching application guide for scheme {scheme_id} ({language})")
+            SubscriptionService.reserve_and_consume_guidance_quota(db=db, user_id=user_id)
             rag_chunks = RAGService.retrieve_relevant_chunks(
                 db=db,
                 scheme_id=scheme_id,
@@ -288,17 +290,21 @@ class AssistanceService:
                 for c in rag_chunks
             ]
 
-            llm_adapter = get_llm_adapter()
-            guide_dict = llm_adapter.generate_application_guide(
-                scheme_name=scheme.scheme_name,
-                category=scheme.category,
-                department=scheme.department,
-                required_documents=scheme.required_documents or [],
-                required_profile_fields=scheme.required_profile_fields or [],
-                application_process=scheme.application_process or [],
-                rag_chunks=rag_dicts,
-                language=language,
-            )
+            try:
+                llm_adapter = get_llm_adapter()
+                guide_dict = llm_adapter.generate_application_guide(
+                    scheme_name=scheme.scheme_name,
+                    category=scheme.category,
+                    department=scheme.department,
+                    required_documents=scheme.required_documents or [],
+                    required_profile_fields=scheme.required_profile_fields or [],
+                    application_process=scheme.application_process or [],
+                    rag_chunks=rag_dicts,
+                    language=language,
+                )
+            except Exception as e:
+                SubscriptionService.release_guidance_quota(db=db, user_id=user_id)
+                raise e
             new_cache = dict(cache)
             new_cache[language] = guide_dict
             scheme.application_guide_cache = new_cache

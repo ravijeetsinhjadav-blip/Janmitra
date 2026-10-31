@@ -735,3 +735,247 @@ class TestRazorpayPaymentsModule:
         assert data["disclaimer"] == "Cached test disclaimer"
         assert len(data["common_mistakes_to_avoid"]) == 1
         assert data["common_mistakes_to_avoid"][0] == "Blurry scan"
+
+    def test_cumulative_partial_refunds_and_revocation(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-07: Multiple partial refunds aggregate cumulatively and revoke subscription when >= 100%."""
+        order_res = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
+        ).json()
+        order_id = order_res["order_id"]
+        payment_id = f"pay_{uuid.uuid4().hex[:14]}"
+
+        # 1. Capture payment
+        SubscriptionService.activate_premium_subscription(
+            db=db_session, user_id=auth_citizen.id, billing_cycle="monthly"
+        )
+        tx = db_session.query(PaymentTransaction).filter_by(razorpay_order_id=order_id).first()
+        tx.payment_status = "captured"
+        tx.razorpay_payment_id = payment_id
+        db_session.commit()
+
+        # 2. First partial refund of ₹50.00 (5,000 paise)
+        rfnd_1 = f"rfnd_{uuid.uuid4().hex[:12]}"
+        body_1 = json.dumps({
+            "event": "refund.processed",
+            "payload": {
+                "refund": {
+                    "entity": {
+                        "id": rfnd_1,
+                        "payment_id": payment_id,
+                        "amount": 5000,
+                        "currency": "INR",
+                        "status": "processed",
+                    }
+                }
+            }
+        }).encode("utf-8")
+        sig_1 = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_1, hashlib.sha256).hexdigest()
+
+        res_1 = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=body_1,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig_1},
+        )
+        assert res_1.status_code == 200
+        assert res_1.json()["status"] == "refunded_partial"
+
+        db_session.refresh(tx)
+        assert float(tx.amount_refunded) == 50.0
+        assert tx.payment_status == "partially_refunded"
+        sub = SubscriptionService.get_active_subscription(db_session, auth_citizen.id)
+        assert sub.plan_type == "premium"
+        assert sub.status == "active"
+
+        # 3. Second partial refund of ₹49.00 (4,900 paise) -> total ₹99.00 == 100%
+        rfnd_2 = f"rfnd_{uuid.uuid4().hex[:12]}"
+        body_2 = json.dumps({
+            "event": "refund.processed",
+            "payload": {
+                "refund": {
+                    "entity": {
+                        "id": rfnd_2,
+                        "payment_id": payment_id,
+                        "amount": 4900,
+                        "currency": "INR",
+                        "status": "processed",
+                    }
+                }
+            }
+        }).encode("utf-8")
+        sig_2 = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_2, hashlib.sha256).hexdigest()
+
+        res_2 = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=body_2,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig_2},
+        )
+        assert res_2.status_code == 200
+        assert res_2.json()["status"] == "refunded_full"
+
+        db_session.refresh(tx)
+        assert float(tx.amount_refunded) == 99.0
+        assert tx.payment_status == "refunded"
+
+    def test_duplicate_refund_event_idempotency(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-07: refund.created followed by refund.processed for same rfnd_id does not double-count."""
+        order_res = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
+        ).json()
+        order_id = order_res["order_id"]
+        payment_id = f"pay_{uuid.uuid4().hex[:14]}"
+
+        tx = db_session.query(PaymentTransaction).filter_by(razorpay_order_id=order_id).first()
+        tx.payment_status = "captured"
+        tx.razorpay_payment_id = payment_id
+        db_session.commit()
+
+        rfnd_id = f"rfnd_{uuid.uuid4().hex[:12]}"
+
+        # Send refund.created
+        body_created = json.dumps({
+            "event": "refund.created",
+            "payload": {
+                "refund": {
+                    "entity": {
+                        "id": rfnd_id,
+                        "payment_id": payment_id,
+                        "amount": 3000,
+                        "currency": "INR",
+                        "status": "created",
+                    }
+                }
+            }
+        }).encode("utf-8")
+        sig = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_created, hashlib.sha256).hexdigest()
+        client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=body_created,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig},
+        )
+
+        # Send refund.processed for same refund ID
+        body_processed = json.dumps({
+            "event": "refund.processed",
+            "payload": {
+                "refund": {
+                    "entity": {
+                        "id": rfnd_id,
+                        "payment_id": payment_id,
+                        "amount": 3000,
+                        "currency": "INR",
+                        "status": "processed",
+                    }
+                }
+            }
+        }).encode("utf-8")
+        sig_p = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_processed, hashlib.sha256).hexdigest()
+        client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=body_processed,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig_p},
+        )
+
+        db_session.refresh(tx)
+        # Should be exactly 30.0, NOT 60.0
+        assert float(tx.amount_refunded) == 30.0
+
+    def test_payment_dispute_lifecycle(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-07: Dispute events update dispute_status and chargeback revokes access on dispute.lost."""
+        order_res = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
+        ).json()
+        order_id = order_res["order_id"]
+        payment_id = f"pay_{uuid.uuid4().hex[:14]}"
+
+        sub = SubscriptionService.activate_premium_subscription(
+            db=db_session, user_id=auth_citizen.id, billing_cycle="monthly"
+        )
+        tx = db_session.query(PaymentTransaction).filter_by(razorpay_order_id=order_id).first()
+        tx.payment_status = "captured"
+        tx.razorpay_payment_id = payment_id
+        tx.subscription_id = sub.id
+        db_session.commit()
+
+        # 1. Dispute Created
+        body_disp = json.dumps({
+            "event": "payment.dispute.created",
+            "payload": {
+                "dispute": {
+                    "entity": {
+                        "id": "disp_12345",
+                        "payment_id": payment_id,
+                        "amount": 9900,
+                        "currency": "INR",
+                        "reason_code": "fraud",
+                        "status": "open",
+                    }
+                }
+            }
+        }).encode("utf-8")
+        sig = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_disp, hashlib.sha256).hexdigest()
+        res = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=body_disp,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig},
+        )
+        assert res.status_code == 200
+        assert res.json()["status"] == "dispute_created"
+        db_session.refresh(tx)
+        assert tx.dispute_status == "created"
+
+        # 2. Dispute Lost -> Revokes subscription
+        body_lost = json.dumps({
+            "event": "payment.dispute.lost",
+            "payload": {
+                "dispute": {
+                    "entity": {
+                        "id": "disp_12345",
+                        "payment_id": payment_id,
+                        "amount": 9900,
+                        "currency": "INR",
+                        "reason_code": "fraud",
+                        "status": "lost",
+                    }
+                }
+            }
+        }).encode("utf-8")
+        sig_l = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), body_lost, hashlib.sha256).hexdigest()
+        res_l = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=body_lost,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig_l},
+        )
+        assert res_l.status_code == 200
+        assert res_l.json()["status"] == "dispute_lost"
+        db_session.refresh(tx)
+        assert tx.dispute_status == "lost"
+        db_session.refresh(sub)
+        assert sub.status == "revoked_chargeback"
+        assert sub.is_active is False
+
+    def test_atomic_quota_ledger_and_rollback(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """SEC-06: Atomic quota reservation increments counter, and rollback releases reserved unit."""
+        quota_before = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        init_used = quota_before.ai_guidance_sessions_used
+
+        # Consume 1 unit
+        SubscriptionService.reserve_and_consume_guidance_quota(db_session, auth_citizen.id)
+        quota_after = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota_after.ai_guidance_sessions_used == init_used + 1
+
+        # Simulate LLM exception and release quota
+        SubscriptionService.release_guidance_quota(db_session, auth_citizen.id)
+        quota_released = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota_released.ai_guidance_sessions_used == init_used
+

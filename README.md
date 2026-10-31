@@ -156,9 +156,10 @@ All database entities are built using **SQLAlchemy 2.x Declarative Base** with *
 7. **`Subscription` (`subscriptions`)**:
    - Subscription tier and billing records.
    - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `plan_type` (`free`/`premium`), `billing_cycle` (`monthly`/`yearly`), `status`, `start_date`, `end_date`.
-   - Approved pricing tiers:
-     - Premium Monthly: ₹99 / month
-     - Premium Yearly: ₹799 / year
+   - Approved pricing tiers & allocations:
+     - Free Plan: Up to 3 document analyses/month, 5 personalized AI guidance sessions/month (₹0.00).
+     - Premium Monthly: ₹99 / month (up to 30 document analyses/month; proposed safety ceiling of 100 AI guidance sessions/month pending Project Owner confirmation).
+     - Premium Yearly: ₹799 / year (up to 30 document analyses/month; proposed safety ceiling of 100 AI guidance sessions/month pending Project Owner confirmation).
 
 8. **`Notification` (`notifications`)**:
    - Citizen in-app deadline reminders, scheme alerts, and status changes.

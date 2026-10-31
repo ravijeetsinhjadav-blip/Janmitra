@@ -34,6 +34,9 @@ class TestPostgresDialectCompatibility:
             "assessments",
             "applications",
             "subscriptions",
+            "user_monthly_quotas",
+            "payment_transactions",
+            "webhook_events",
             "notifications",
             "otp_challenges",
             "user_sessions",
@@ -64,6 +67,25 @@ class TestPostgresDialectCompatibility:
         deletion_table = Base.metadata.tables["account_deletion_requests"]
         del_ddl = str(CreateTable(deletion_table).compile(dialect=pg_dialect))
         assert "FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE" in del_ddl
+
+    def test_postgresql_payment_and_quota_ledger_ddl(self):
+        pg_dialect = postgresql.dialect()
+        quota_table = Base.metadata.tables["user_monthly_quotas"]
+        quota_ddl = str(CreateTable(quota_table).compile(dialect=pg_dialect))
+        assert "uq_user_monthly_quota UNIQUE (user_id, year_month)" in quota_ddl
+        assert "guidance_sessions_used INTEGER" in quota_ddl
+        assert "doc_analyses_used INTEGER" in quota_ddl
+
+        tx_table = Base.metadata.tables["payment_transactions"]
+        tx_ddl = str(CreateTable(tx_table).compile(dialect=pg_dialect))
+        assert "amount_refunded NUMERIC(10, 2)" in tx_ddl
+        assert "dispute_status VARCHAR(50)" in tx_ddl
+        assert "refunds_log JSONB" in tx_ddl
+
+        wh_table = Base.metadata.tables["webhook_events"]
+        wh_ddl = str(CreateTable(wh_table).compile(dialect=pg_dialect))
+        assert "event_id VARCHAR(100)" in wh_ddl
+        assert "payload_summary JSONB" in wh_ddl
 
 
 class TestPostgresLiveIntegration:

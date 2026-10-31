@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException, status
 
-from app.models.subscription import Subscription, PLAN_TYPES, BILLING_CYCLES
+from app.models.subscription import Subscription, UserMonthlyQuota, PLAN_TYPES, BILLING_CYCLES
 from app.models.document import DocumentMetadata, DocumentProcessingStatus
 from app.models.assessment import Assessment
 from app.schemas.subscription import (
@@ -67,7 +67,7 @@ class SubscriptionService:
                 features=[
                     "Everything in Free Plan",
                     f"Up to {settings.PREMIUM_MONTHLY_DOC_ANALYSES_LIMIT} AI document analyses per month",
-                    f"Expanded AI advisory guidance (up to {settings.PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT} sessions per month)",
+                    f"Expanded AI advisory guidance (fair-use safety ceiling: up to {settings.PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT} sessions per month; subject to confirmation)",
                     "Advanced document consistency & identity cross-checks",
                     "Priority application assistance with interactive checklists",
                     "Common mistakes alerts (merged bank IFSCs, spelling mismatches)",
@@ -132,9 +132,73 @@ class SubscriptionService:
         return sub
 
     @classmethod
+    def get_or_create_monthly_quota_record(
+        cls, db: Session, user_id: uuid.UUID, for_update: bool = False
+    ) -> Optional[UserMonthlyQuota]:
+        """Retrieve or initialize the citizen's atomic monthly quota record."""
+        now = datetime.now(timezone.utc)
+        ym = f"{now.year:04d}-{now.month:02d}"
+
+        query = db.query(UserMonthlyQuota).filter(
+            UserMonthlyQuota.user_id == user_id,
+            UserMonthlyQuota.year_month == ym,
+        )
+        if for_update:
+            query = query.with_for_update()
+
+        record = query.first()
+        if not record:
+            month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+            doc_count = (
+                db.query(func.count(DocumentMetadata.id))
+                .filter(
+                    DocumentMetadata.user_id == user_id,
+                    DocumentMetadata.ocr_status.in_([
+                        DocumentProcessingStatus.OCR_COMPLETED,
+                        DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED,
+                    ]),
+                    DocumentMetadata.created_at >= month_start,
+                )
+                .scalar()
+                or 0
+            )
+            guidance_count = (
+                db.query(func.count(Assessment.id))
+                .filter(
+                    Assessment.user_id == user_id,
+                    Assessment.advisory_guidance != {},
+                    Assessment.created_at >= month_start,
+                )
+                .scalar()
+                or 0
+            )
+            try:
+                record = UserMonthlyQuota(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    year_month=ym,
+                    guidance_sessions_used=guidance_count,
+                    doc_analyses_used=doc_count,
+                )
+                db.add(record)
+                db.commit()
+                db.refresh(record)
+            except Exception:
+                db.rollback()
+                query = db.query(UserMonthlyQuota).filter(
+                    UserMonthlyQuota.user_id == user_id,
+                    UserMonthlyQuota.year_month == ym,
+                )
+                if for_update:
+                    query = query.with_for_update()
+                record = query.first()
+        return record
+
+    @classmethod
     def get_quota_status(cls, db: Session, user_id: uuid.UUID) -> UsageQuotaStatus:
         """Calculate current calendar month usage against plan quota limits.
         SEC-05: Exclude OCR_FAILED documents so citizens are not penalized for failed extractions.
+        SEC-06: Backed by atomic monthly quota ledger.
         """
         now = datetime.now(timezone.utc)
         month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
@@ -158,9 +222,10 @@ class SubscriptionService:
             else settings.FREE_MONTHLY_AI_GUIDANCE_LIMIT
         )
 
+        quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=False)
+
         # Count usable document analyses this month (SEC-05)
-        # Excludes OCR_FAILED documents
-        doc_count = (
+        live_doc_count = (
             db.query(func.count(DocumentMetadata.id))
             .filter(
                 DocumentMetadata.user_id == user_id,
@@ -175,7 +240,7 @@ class SubscriptionService:
         )
 
         # Count AI guidance sessions this month
-        guidance_count = (
+        live_guidance_count = (
             db.query(func.count(Assessment.id))
             .filter(
                 Assessment.user_id == user_id,
@@ -186,6 +251,9 @@ class SubscriptionService:
             or 0
         )
 
+        doc_count = max(quota_record.doc_analyses_used if quota_record else 0, live_doc_count)
+        guidance_count = max(quota_record.guidance_sessions_used if quota_record else 0, live_guidance_count)
+
         return UsageQuotaStatus(
             ai_document_analyses_used=doc_count,
             ai_document_analyses_limit=doc_limit,
@@ -195,6 +263,34 @@ class SubscriptionService:
             can_request_guidance=(guidance_count < guidance_limit),
             quota_reset_date=reset_date,
         )
+
+    @classmethod
+    def reserve_and_consume_guidance_quota(cls, db: Session, user_id: uuid.UUID) -> None:
+        """Atomically verify and consume 1 AI guidance session under row-level lock (SEC-06)."""
+        cls.enforce_ai_guidance_quota(db, user_id)
+        quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=True)
+        if quota_record:
+            quota_record.guidance_sessions_used += 1
+            db.commit()
+            db.refresh(quota_record)
+
+    @classmethod
+    def release_guidance_quota(cls, db: Session, user_id: uuid.UUID) -> None:
+        """Release 1 previously reserved AI guidance session if LLM execution failed (SEC-06)."""
+        quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=True)
+        if quota_record and quota_record.guidance_sessions_used > 0:
+            quota_record.guidance_sessions_used -= 1
+            db.commit()
+
+    @classmethod
+    def consume_document_analysis_quota(cls, db: Session, user_id: uuid.UUID) -> None:
+        """Atomically verify and consume 1 document analysis quota unit under row lock (SEC-06)."""
+        cls.enforce_document_analysis_quota(db, user_id)
+        quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=True)
+        if quota_record:
+            quota_record.doc_analyses_used += 1
+            db.commit()
+            db.refresh(quota_record)
 
     @classmethod
     def enforce_document_analysis_quota(cls, db: Session, user_id: uuid.UUID) -> None:
@@ -292,6 +388,7 @@ class SubscriptionService:
                 Subscription.plan_type == "premium",
                 Subscription.status == "active",
             )
+            .with_for_update()
             .order_by(Subscription.end_date.desc())
             .first()
         )

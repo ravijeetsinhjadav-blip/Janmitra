@@ -103,6 +103,28 @@ class PaymentTransaction(Base):
         index=True,
         comment="Idempotency key to prevent duplicate processing",
     )
+    amount_refunded = Column(
+        Numeric(10, 2),
+        nullable=False,
+        default=0.0,
+        server_default="0.0",
+        comment="Cumulative refunded amount in INR",
+    )
+    dispute_status = Column(
+        String(50),
+        nullable=False,
+        default="none",
+        server_default="none",
+        index=True,
+        comment="Dispute status: none, created, under_review, won, lost, closed",
+    )
+    refunds_log = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Audit registry of processed refunds indexed by refund ID",
+    )
     payment_metadata = Column(
         JSONB,
         nullable=False,

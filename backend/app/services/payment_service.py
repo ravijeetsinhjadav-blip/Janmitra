@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 import httpx
 
@@ -34,6 +35,24 @@ PLAN_PRICES_PAISE = {
 }
 
 
+# SEC-10: Strict field allowlists for financial audit without customer PII
+PAYMENT_ENTITY_ALLOWLIST = {
+    "id", "order_id", "status", "amount", "currency",
+    "method", "bank", "wallet", "international",
+    "error_code", "error_description", "created_at"
+}
+
+REFUND_ENTITY_ALLOWLIST = {
+    "id", "payment_id", "amount", "currency",
+    "status", "speed_processed", "created_at"
+}
+
+DISPUTE_ENTITY_ALLOWLIST = {
+    "id", "payment_id", "amount", "currency",
+    "reason_code", "status", "created_at"
+}
+
+
 def _mask_string(value: Optional[str], visible_suffix: int = 4) -> Optional[str]:
     """Mask sensitive string, showing only trailing characters."""
     if not value or not isinstance(value, str):
@@ -43,15 +62,22 @@ def _mask_string(value: Optional[str], visible_suffix: int = 4) -> Optional[str]
     return "*" * (len(value) - visible_suffix) + value[-visible_suffix:]
 
 
-def _sanitize_payment_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
-    """Mask PII fields (contact, email, vpa) in payment or refund payloads."""
+def _extract_safe_entity(entity: Dict[str, Any], allowlist: set) -> Dict[str, Any]:
+    """Extract allowlisted financial fields and masked identifiers, omitting raw customer PII (SEC-10)."""
     if not isinstance(entity, dict):
         return {}
-    sanitized = dict(entity)
-    for key in ["contact", "email", "vpa"]:
-        if key in sanitized and sanitized[key]:
-            sanitized[key] = _mask_string(str(sanitized[key]))
-    return sanitized
+    result = {k: entity[k] for k in allowlist if k in entity and entity[k] is not None}
+    for pii_key in ["contact", "email", "vpa"]:
+        if pii_key in entity and entity[pii_key]:
+            result[pii_key] = _mask_string(str(entity[pii_key]))
+    return result
+
+
+def _sanitize_payment_entity(entity: Dict[str, Any]) -> Dict[str, Any]:
+    """Sanitize entity: combines allowlisting and legacy PII masking for backward compatibility."""
+    if not isinstance(entity, dict):
+        return {}
+    return _extract_safe_entity(entity, PAYMENT_ENTITY_ALLOWLIST)
 
 
 class PaymentService:
@@ -193,10 +219,11 @@ class PaymentService:
                 detail="Payment signature verification failed. Untrusted payment payload rejected.",
             )
 
-        # 2. Lookup transaction and check ownership (anti-IDOR)
+        # 2. Lookup transaction and check ownership (anti-IDOR) with pessimistic lock (SEC-04)
         tx = (
             db.query(PaymentTransaction)
             .filter(PaymentTransaction.razorpay_order_id == order_id)
+            .with_for_update()
             .first()
         )
         if not tx:
@@ -213,8 +240,8 @@ class PaymentService:
             )
 
         # 3. Idempotent check
-        if tx.payment_status == "captured":
-            logger.info(f"Transaction {tx.id} already captured. Returning idempotent success.")
+        if tx.payment_status in ["captured", "refunded"]:
+            logger.info(f"Transaction {tx.id} already {tx.payment_status}. Returning idempotent success.")
             sub_resp = SubscriptionService.get_citizen_subscription_response(db, user_id)
             return PaymentVerificationResponse(
                 success=True,
@@ -374,7 +401,7 @@ class PaymentService:
                     "event": event,
                 }
 
-        # 3. Extract entities (payment, refund, order)
+        # 3. Extract entities (payment, refund, order, dispute)
         payment_entity = (
             payload.get("payload", {})
             .get("payment", {})
@@ -390,9 +417,14 @@ class PaymentService:
             .get("order", {})
             .get("entity", {})
         )
+        dispute_entity = (
+            payload.get("payload", {})
+            .get("dispute", {})
+            .get("entity", {})
+        )
 
         order_id = payment_entity.get("order_id") or order_entity.get("id")
-        payment_id = payment_entity.get("id") or refund_entity.get("payment_id")
+        payment_id = payment_entity.get("id") or refund_entity.get("payment_id") or dispute_entity.get("payment_id")
 
         # 4. Lookup transaction with pessimistic row lock (SEC-04)
         query = db.query(PaymentTransaction).with_for_update()
@@ -428,7 +460,7 @@ class PaymentService:
                 tx.payment_method = payment_entity.get("method", tx.payment_method)
                 tx.payment_metadata = {
                     "webhook_event": event,
-                    "payload": _sanitize_payment_entity(payment_entity),
+                    "payload": _extract_safe_entity(payment_entity, PAYMENT_ENTITY_ALLOWLIST),
                 }
                 result_status = "captured"
 
@@ -438,19 +470,35 @@ class PaymentService:
             tx.error_description = payment_entity.get("error_description")
             tx.payment_metadata = {
                 "webhook_event": event,
-                "payload": _sanitize_payment_entity(payment_entity),
+                "payload": _extract_safe_entity(payment_entity, PAYMENT_ENTITY_ALLOWLIST),
             }
             result_status = "failed"
 
         elif event in ["refund.processed", "refund.created"]:
-            # SEC-07: Distinguish full vs partial refunds
-            refund_amount_paise = refund_entity.get("amount", 0)
-            full_amount_paise = PLAN_PRICES_PAISE.get(tx.billing_cycle, int(float(tx.amount) * 100))
+            # SEC-07: Cumulative refund handling & tracking
+            refund_id = refund_entity.get("id") or f"rfnd_{uuid.uuid4().hex[:12]}"
+            refund_amt_paise = refund_entity.get("amount", 0)
+            refund_amt_inr = round(float(refund_amt_paise) / 100.0, 2)
 
-            sanitized_refund = _sanitize_payment_entity(refund_entity)
+            # Record in refunds_log to prevent double counting on duplicate/retry events
+            current_log = dict(tx.refunds_log or {})
+            current_log[refund_id] = {
+                "amount_paise": refund_amt_paise,
+                "amount_inr": refund_amt_inr,
+                "event": event,
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            tx.refunds_log = current_log
 
-            if refund_amount_paise >= full_amount_paise:
-                # Full refund: revoke/expire active subscription
+            # Calculate total cumulative refund
+            total_refunded_inr = round(sum(float(r["amount_inr"]) for r in current_log.values()), 2)
+            tx.amount_refunded = total_refunded_inr
+            full_amount_inr = float(tx.amount)
+
+            sanitized_refund = _extract_safe_entity(refund_entity, REFUND_ENTITY_ALLOWLIST)
+
+            if total_refunded_inr >= full_amount_inr:
+                # Cumulative full refund: revoke active subscription
                 tx.payment_status = "refunded"
                 if tx.subscription_id:
                     sub = (
@@ -462,29 +510,88 @@ class PaymentService:
                         sub.status = "refunded"
                         sub.is_active = False
                         sub.end_date = datetime.now(timezone.utc)
-                        logger.info(f"Full refund: Revoked subscription {sub.id} for user {tx.user_id}")
+                        logger.info(f"Full refund reached ({total_refunded_inr} >= {full_amount_inr}): Revoked subscription {sub.id} for user {tx.user_id}")
 
                 tx.payment_metadata = {
                     **(tx.payment_metadata or {}),
                     "webhook_event": event,
                     "refund_type": "full",
-                    "refund_amount": refund_amount_paise,
+                    "total_refunded_inr": total_refunded_inr,
                     "refund_payload": sanitized_refund,
                 }
                 result_status = "refunded_full"
             else:
-                # Partial refund: audit telemetry only; keep active subscription intact
+                # Cumulative partial refund: retain active subscription
+                tx.payment_status = "partially_refunded"
                 tx.payment_metadata = {
                     **(tx.payment_metadata or {}),
                     "webhook_event": event,
                     "refund_type": "partial",
-                    "refund_amount": refund_amount_paise,
+                    "total_refunded_inr": total_refunded_inr,
                     "refund_payload": sanitized_refund,
                 }
                 logger.info(
-                    f"Partial refund of {refund_amount_paise} paise recorded for tx {tx.id}. Subscription retained."
+                    f"Cumulative partial refund of {total_refunded_inr} INR recorded for tx {tx.id}. Subscription retained."
                 )
                 result_status = "refunded_partial"
+
+        elif event == "payment.dispute.created":
+            tx.dispute_status = "created"
+            tx.payment_metadata = {
+                **(tx.payment_metadata or {}),
+                "webhook_event": event,
+                "dispute_payload": _extract_safe_entity(dispute_entity, DISPUTE_ENTITY_ALLOWLIST),
+            }
+            result_status = "dispute_created"
+            logger.warning(f"Payment dispute created for transaction {tx.id}")
+
+        elif event == "payment.dispute.under_review":
+            tx.dispute_status = "under_review"
+            tx.payment_metadata = {
+                **(tx.payment_metadata or {}),
+                "webhook_event": event,
+                "dispute_payload": _extract_safe_entity(dispute_entity, DISPUTE_ENTITY_ALLOWLIST),
+            }
+            result_status = "dispute_under_review"
+
+        elif event == "payment.dispute.won":
+            tx.dispute_status = "won"
+            tx.payment_metadata = {
+                **(tx.payment_metadata or {}),
+                "webhook_event": event,
+                "dispute_payload": _extract_safe_entity(dispute_entity, DISPUTE_ENTITY_ALLOWLIST),
+            }
+            result_status = "dispute_won"
+            logger.info(f"Payment dispute won for transaction {tx.id}")
+
+        elif event == "payment.dispute.lost":
+            tx.dispute_status = "lost"
+            tx.payment_status = "refunded"
+            if tx.subscription_id:
+                sub = (
+                    db.query(Subscription)
+                    .filter(Subscription.id == tx.subscription_id)
+                    .first()
+                )
+                if sub:
+                    sub.status = "revoked_chargeback"
+                    sub.is_active = False
+                    sub.end_date = datetime.now(timezone.utc)
+                    logger.info(f"Dispute lost: Revoked subscription {sub.id} due to bank chargeback.")
+            tx.payment_metadata = {
+                **(tx.payment_metadata or {}),
+                "webhook_event": event,
+                "dispute_payload": _extract_safe_entity(dispute_entity, DISPUTE_ENTITY_ALLOWLIST),
+            }
+            result_status = "dispute_lost"
+
+        elif event == "payment.dispute.closed":
+            tx.dispute_status = "closed"
+            tx.payment_metadata = {
+                **(tx.payment_metadata or {}),
+                "webhook_event": event,
+            }
+            result_status = "dispute_closed"
 
         # 6. Record processed WebhookEvent for deduplication (SEC-04)
         if event_id:
@@ -497,13 +604,24 @@ class PaymentService:
                 status=result_status,
                 payload_summary={
                     "event": event,
-                    "amount": payment_entity.get("amount") or refund_entity.get("amount"),
-                    "currency": payment_entity.get("currency") or refund_entity.get("currency"),
+                    "amount": payment_entity.get("amount") or refund_entity.get("amount") or dispute_entity.get("amount"),
+                    "currency": payment_entity.get("currency") or refund_entity.get("currency") or dispute_entity.get("currency"),
+                    "method": payment_entity.get("method"),
+                    "status": result_status,
                 },
             )
             db.add(wh_record)
 
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            logger.info(f"Concurrent duplicate webhook event {event_id} caught by unique constraint.")
+            return {
+                "status": "idempotent_duplicate",
+                "event_id": event_id,
+                "event": event,
+            }
         return {"status": result_status, "transaction_id": str(tx.id), "event": event}
 
     @classmethod
@@ -530,6 +648,8 @@ class PaymentService:
                 plan_type=t.plan_type,
                 billing_cycle=t.billing_cycle,
                 payment_status=t.payment_status,
+                amount_refunded=float(t.amount_refunded or 0.0),
+                dispute_status=t.dispute_status or "none",
                 payment_method=t.payment_method,
                 error_code=t.error_code,
                 error_description=t.error_description,

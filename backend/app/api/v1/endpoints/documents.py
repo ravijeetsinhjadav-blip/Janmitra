@@ -40,8 +40,8 @@ def upload_document(
     db: Session = Depends(get_db),
 ):
     """Securely upload document and perform OCR extraction after quota validation."""
-    # Enforce monthly document analysis quota (Free vs Premium)
-    SubscriptionService.enforce_document_analysis_quota(db=db, user_id=current_user.id)
+    # Atomically verify and consume monthly document analysis quota (Free vs Premium)
+    SubscriptionService.consume_document_analysis_quota(db=db, user_id=current_user.id)
 
     doc = document_service.upload_document(
         db=db,

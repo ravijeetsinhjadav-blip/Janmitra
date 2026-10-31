@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, func
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -87,4 +87,66 @@ class Subscription(Base):
 
     def __repr__(self) -> str:
         return f"<Subscription id={self.id} user_id={self.user_id} plan='{self.plan_type}' status='{self.status}'>"
+
+
+class UserMonthlyQuota(Base):
+    """Tracks atomic consumption of monthly quota allocations per citizen."""
+    __tablename__ = "user_monthly_quotas"
+    __table_args__ = (
+        UniqueConstraint("user_id", "year_month", name="uq_user_monthly_quota"),
+    )
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+        comment="Primary UUID key for monthly quota record",
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Associated citizen user ID",
+    )
+    year_month = Column(
+        String(7),
+        nullable=False,
+        index=True,
+        comment="Calendar month formatted as YYYY-MM (e.g. 2026-10)",
+    )
+    guidance_sessions_used = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Count of consumed AI guidance sessions this calendar month",
+    )
+    doc_analyses_used = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Count of consumed AI document analyses this calendar month",
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        comment="Quota ledger record creation timestamp",
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        comment="Quota ledger record last updated timestamp",
+    )
+
+    user = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<UserMonthlyQuota user_id={self.user_id} ym='{self.year_month}' guidance={self.guidance_sessions_used} docs={self.doc_analyses_used}>"
+
 

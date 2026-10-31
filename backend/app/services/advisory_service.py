@@ -11,6 +11,7 @@ from app.services.scheme_service import SchemeService
 from app.services.rag_service import RAGService
 from app.services.readiness_service import ReadinessService
 from app.services.llm_service import get_llm_adapter
+from app.services.subscription_service import SubscriptionService
 from app.schemas.advisory import (
     AdvisoryAssessmentResponse,
     ReadinessBreakdown,
@@ -91,21 +92,26 @@ class AdvisoryService:
             for c in rag_chunks
         ]
 
-        # 4. Invoke LLM Provider Adapter
-        llm_adapter = get_llm_adapter()
-        breakdown_dicts = [c.model_dump() for c in assessment_res.conditions_breakdown]
+        # 4. Atomically reserve and consume quota before LLM invocation (SEC-06)
+        SubscriptionService.reserve_and_consume_guidance_quota(db=db, user_id=user_id)
+        try:
+            llm_adapter = get_llm_adapter()
+            breakdown_dicts = [c.model_dump() for c in assessment_res.conditions_breakdown]
 
-        advisory_dict = llm_adapter.generate_advisory(
-            scheme_name=scheme.scheme_name,
-            category=scheme.category,
-            overall_status=assessment_res.overall_status,
-            criteria_match_percentage=assessment_res.criteria_match_percentage,
-            conditions_breakdown=breakdown_dicts,
-            missing_fields=assessment_res.missing_fields,
-            rag_chunks=rag_dicts,
-            document_readiness=readiness_data,
-            language=language,
-        )
+            advisory_dict = llm_adapter.generate_advisory(
+                scheme_name=scheme.scheme_name,
+                category=scheme.category,
+                overall_status=assessment_res.overall_status,
+                criteria_match_percentage=assessment_res.criteria_match_percentage,
+                conditions_breakdown=breakdown_dicts,
+                missing_fields=assessment_res.missing_fields,
+                rag_chunks=rag_dicts,
+                document_readiness=readiness_data,
+                language=language,
+            )
+        except Exception as e:
+            SubscriptionService.release_guidance_quota(db=db, user_id=user_id)
+            raise e
 
         # 5. Persist readiness and AI guidance back to Assessment record
         assessment.overall_readiness_score = readiness_data["overall_readiness_score"]
@@ -227,19 +233,24 @@ class AdvisoryService:
             for c in rag_chunks
         ]
 
-        # Generate advisory in requested language
-        llm_adapter = get_llm_adapter()
-        advisory_dict = llm_adapter.generate_advisory(
-            scheme_name=scheme.scheme_name,
-            category=scheme.category,
-            overall_status=overall_status,
-            criteria_match_percentage=criteria_match,
-            conditions_breakdown=conditions,
-            missing_fields=missing_fields,
-            rag_chunks=rag_dicts,
-            document_readiness=readiness_data,
-            language=language,
-        )
+        # Generate advisory in requested language after atomic quota deduction (SEC-06)
+        SubscriptionService.reserve_and_consume_guidance_quota(db=db, user_id=user_id)
+        try:
+            llm_adapter = get_llm_adapter()
+            advisory_dict = llm_adapter.generate_advisory(
+                scheme_name=scheme.scheme_name,
+                category=scheme.category,
+                overall_status=overall_status,
+                criteria_match_percentage=criteria_match,
+                conditions_breakdown=conditions,
+                missing_fields=missing_fields,
+                rag_chunks=rag_dicts,
+                document_readiness=readiness_data,
+                language=language,
+            )
+        except Exception as e:
+            SubscriptionService.release_guidance_quota(db=db, user_id=user_id)
+            raise e
 
         assessment.overall_readiness_score = readiness_data["overall_readiness_score"]
         assessment.readiness_breakdown = readiness_data

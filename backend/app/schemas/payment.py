@@ -49,6 +49,8 @@ class PaymentTransactionResponse(BaseModel):
     plan_type: str
     billing_cycle: str
     payment_status: str
+    amount_refunded: float = 0.0
+    dispute_status: str = "none"
     payment_method: Optional[str] = None
     error_code: Optional[str] = None
     error_description: Optional[str] = None

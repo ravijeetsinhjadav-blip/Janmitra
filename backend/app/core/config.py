@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     FREE_MONTHLY_DOC_ANALYSES_LIMIT: int = 3
     PREMIUM_MONTHLY_DOC_ANALYSES_LIMIT: int = 30
     FREE_MONTHLY_AI_GUIDANCE_LIMIT: int = 5
+    # Proposed fair-use safety limit pending Project Owner commercial confirmation. Configurable via .env.
     PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT: int = 100
 
     @property
