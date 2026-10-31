@@ -82,11 +82,24 @@
   - Non-numeric or invalid actual citizen profile values for numeric operators $\to$ returns safe `status="unknown"` with `"Cannot evaluate condition: citizen profile field <field> is not a valid number"`.
   - Validated type safety for collection operators (`in` requires collections/strings) and text operators (`contains` requires non-empty strings/collections).
 - **Age Calculation & Leap Year Birthday Handling:**
-  - Acknowledges that no single leap-year convention is universally uniform across all Indian central and state government authorities.
-  - Implemented configurable `feb29_convention` in `calculate_age`:
-    - `"statutory_anniversary"` (default): Under common law and Indian statutory interpretation (General Clauses Act, Section 9), 365 full days elapse at midnight on February 28 in common years, so the legal anniversary is attained on March 1.
-    - `"end_of_february"`: Under administrative conventions applied by select departments, the anniversary is deemed completed on the final day of February (February 28 in common years).
-  - Added support for scheme-specific official cutoff dates (`reference_date` / `cutoff_date`) for age determination (e.g. January 1 or July 1 of recruitment/academic years).
+  - Scheme-specific official cutoff dates take priority wherever defined in government notifications.
+  - Acknowledges that neither convention is a universal Indian legal rule. Section 9 of the General Clauses Act, 1897 concerns the commencement and termination of time periods (excluding/including boundary days in statutory intervals) and does not establish a direct legal rule for leap-year birthdays.
+  - Supported technical default conventions via configurable `feb29_convention` parameter:
+    - `"statutory_anniversary"` (default technical convention): Anniversary deemed on March 1 after 365 complete calendar days elapse in common years.
+    - `"end_of_february"`: Administrative convention where the anniversary is deemed to occur on the final day of February (February 28 in common years).
+  - Supported scheme-specific official cutoff dates (`reference_date` / `cutoff_date`) for age determination (e.g. January 1 or July 1 of recruitment/academic years).
+- **Harden the `in` Operator:**
+  - Accepts only valid collections: `list`, `tuple`, or `set`.
+  - Rejects plain strings (`str`) as expected collections with an explicit configuration error (`status="unknown"`).
+  - Eliminates substring-related false positives (e.g. `"SC"` in `"MISC"`, `"Maha"` in `"Maharashtra"`).
+- **Review of the `contains` Operator:**
+  - Prevents ambiguous substring matching for controlled demographic fields (`residence_type`, `state`, `gender`, `category`, `occupation`) by enforcing normalized exact matching.
+  - Prevents substring false positives (e.g. `"ur"` matching `"rural"` or `"urban"`, `"art"` matching `"Cart driver"`, `"SC"` matching `"MISC"`).
+  - Retains substring matching only where explicitly justified on free-form descriptive text fields.
+- **Correct Source Freshness Defaults:**
+  - Newly created schemes default to `Pending Verification`, not `Verified Official Source`.
+  - Verification timestamps are never invented (`source_last_verified_at` defaults to `None` until an actual source review occurs).
+  - Supports lifecycle freshness statuses: `Pending Verification`, `Verified Official Source`, `Review Required`, and `Stale`.
 - **Scheme Source Verification & Demo Integrity:**
   - Extended scheme metadata to persist `source_freshness_status`, `eligibility_source_reference`, `benefits_source_reference`, and `source_verification_details`.
   - All 5 seeded schemes verified against authentic central and state portals:
@@ -102,7 +115,7 @@
   - Schemes with any clearly failed mandatory conditions are strictly excluded from recommendations.
   - UI displays an advisory disclaimer above recommendations.
 - **Testing & Verification:**
-  - **Backend Pytest Suite:** **58 passed, 1 skipped (live PostgreSQL network test), 0 failed** across 59 tests.
+  - **Backend Pytest Suite:** **63 passed, 1 skipped (live PostgreSQL network test), 0 failed** across 64 tests.
   - **Flutter Widget & Unit Tests:** **7 passed, 0 failed** (including responsiveness and mobile card tests).
   - **Flutter Analysis:** **0 issues found** via `flutter analyze`.
   - **Alembic Database Migrations:** Static SQL upgrade and downgrade validated via `PostgresqlImpl`. Live execution documented as pending PostgreSQL local daemon availability.

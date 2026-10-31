@@ -104,13 +104,15 @@ class Scheme(Base):
     source_last_verified_at = Column(
         DateTime(timezone=True),
         nullable=True,
-        comment="Timestamp when scheme source information was last verified",
+        default=None,
+        comment="Timestamp when scheme source information was last verified (null until actual review)",
     )
     source_freshness_status = Column(
         String(50),
         nullable=False,
-        default="Verified Official Source",
-        comment="Verification freshness status: 'Verified Official Source', 'Pending Verification', etc.",
+        default="Pending Verification",
+        server_default="Pending Verification",
+        comment="Verification freshness status: 'Pending Verification', 'Verified Official Source', 'Review Required', 'Stale'",
     )
     eligibility_source_reference = Column(
         String(500),
@@ -165,6 +167,20 @@ class Scheme(Base):
     # Relationships
     assessments = relationship("Assessment", back_populates="scheme")
     applications = relationship("Application", back_populates="scheme")
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("source_freshness_status", "Pending Verification")
+        kwargs.setdefault("category", "General")
+        kwargs.setdefault("state_applicability", "All India")
+        kwargs.setdefault("status", "active")
+        kwargs.setdefault("is_active", True)
+        kwargs.setdefault("is_demo_data", False)
+        kwargs.setdefault("benefits", [])
+        kwargs.setdefault("eligibility_criteria", [])
+        kwargs.setdefault("required_profile_fields", [])
+        kwargs.setdefault("application_process", [])
+        kwargs.setdefault("required_documents", [])
+        super().__init__(**kwargs)
 
     def __repr__(self) -> str:
         return f"<Scheme id={self.id} name='{self.scheme_name}' state='{self.state_applicability}'>"

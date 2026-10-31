@@ -141,7 +141,9 @@ class TestEligibilityEngineOperatorsAndSafety:
 
         # 6. contains
         cond_cont = EligibilityCondition(condition_name="Occupation", field="occupation", operator="contains", expected_value="farmer", explanation="Farming occupation")
-        assert EligibilityEngine.evaluate_condition(cond_cont, {"occupation": "Small farmer"}).status == "satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_cont, {"occupation": "Farmer"}).status == "satisfied"
+        # Controlled fields use normalized exact matching: ambiguous partial substrings do not match
+        assert EligibilityEngine.evaluate_condition(cond_cont, {"occupation": "Small farmer"}).status == "not_satisfied"
         assert EligibilityEngine.evaluate_condition(cond_cont, {"occupation": "Software Engineer"}).status == "not_satisfied"
 
     def test_contains_edge_cases_and_empty_string_safety(self):
@@ -153,6 +155,60 @@ class TestEligibilityEngineOperatorsAndSafety:
         cond_whitespace = EligibilityCondition(condition_name="Occupation", field="occupation", operator="contains", expected_value="   ", explanation="Spaces")
         result_ws = EligibilityEngine.evaluate_condition(cond_whitespace, {"occupation": "Farmer"})
         assert result_ws.status == "not_satisfied"
+
+    def test_contains_operator_controlled_fields_prevent_substring_false_positives(self):
+        """Ambiguous substring matching must be prevented for controlled fields (residence_type, state, category, occupation)."""
+        # 1. 'ur' in 'rural' or 'urban'
+        cond_ur = EligibilityCondition(condition_name="Res", field="residence_type", operator="contains", expected_value="ur", explanation="Check")
+        assert EligibilityEngine.evaluate_condition(cond_ur, {"residence_type": "rural"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_ur, {"residence_type": "urban"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_ur, {"residence_type": "ur"}).status == "satisfied"
+
+        # 2. 'art' in 'Cart driver' or 'Farmer'
+        cond_art = EligibilityCondition(condition_name="Occ", field="occupation", operator="contains", expected_value="art", explanation="Art")
+        assert EligibilityEngine.evaluate_condition(cond_art, {"occupation": "Cart driver"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_art, {"occupation": "Farmer"}).status == "not_satisfied"
+
+        # 3. 'SC' in 'MISC'
+        cond_sc = EligibilityCondition(condition_name="Cat", field="category", operator="contains", expected_value="SC", explanation="Cat")
+        assert EligibilityEngine.evaluate_condition(cond_sc, {"category": "MISC"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_sc, {"category": "SC"}).status == "satisfied"
+
+        # 4. 'Goa' in 'Goan'
+        cond_goa = EligibilityCondition(condition_name="State", field="state", operator="contains", expected_value="Goa", explanation="State")
+        assert EligibilityEngine.evaluate_condition(cond_goa, {"state": "Goan"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_goa, {"state": "Goa"}).status == "satisfied"
+
+    def test_contains_operator_retains_justified_substring_matching_on_freeform_fields(self):
+        """Free-form descriptive text fields retain justified substring matching."""
+        cond_free = EligibilityCondition(condition_name="Disability", field="disability_description", operator="contains", expected_value="locomotor", explanation="Check")
+        assert EligibilityEngine.evaluate_condition(cond_free, {"disability_description": "Severe locomotor impairment"}).status == "satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_free, {"disability_description": "Visual impairment"}).status == "not_satisfied"
+
+    def test_in_operator_rejects_plain_string_and_prevents_substring_false_positives(self):
+        """The 'in' operator must accept only collections (list, tuple, set) and reject strings to prevent false positives."""
+        # 1. Plain string rejected as expected collection
+        cond_str_exp = {"condition_name": "Category In", "field": "category", "operator": "in", "expected_value": "SC, ST", "explanation": "Bad string"}
+        res_str = EligibilityEngine.evaluate_condition(cond_str_exp, {"category": "SC"})
+        assert res_str.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_str.explanation
+
+        # 2. Non-collection type (int, dict) rejected
+        cond_int_exp = {"condition_name": "Int In", "field": "category", "operator": "in", "expected_value": 12345, "explanation": "Bad int"}
+        res_int = EligibilityEngine.evaluate_condition(cond_int_exp, {"category": "SC"})
+        assert res_int.status == "unknown"
+        assert "Invalid scheme rule configuration" in res_int.explanation
+
+        # 3. Valid collection prevents substring false positive ('SC' is in 'MISC', but collection requires exact item)
+        cond_valid_in = EligibilityCondition(condition_name="Category Valid", field="category", operator="in", expected_value=["SC", "ST"], explanation="Valid")
+        assert EligibilityEngine.evaluate_condition(cond_valid_in, {"category": "MISC"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_valid_in, {"category": "SC"}).status == "satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_valid_in, {"category": "General"}).status == "not_satisfied"
+
+        # 4. State substring: 'Maha' does not match 'Maharashtra'
+        cond_state_in = EligibilityCondition(condition_name="State Valid", field="state", operator="in", expected_value=["Maharashtra", "Gujarat"], explanation="Valid states")
+        assert EligibilityEngine.evaluate_condition(cond_state_in, {"state": "Maha"}).status == "not_satisfied"
+        assert EligibilityEngine.evaluate_condition(cond_state_in, {"state": "Maharashtra"}).status == "satisfied"
 
     def test_invalid_actual_values_for_numeric_operators(self):
         """Invalid actual citizen profile values (non-numeric string, NaN, Inf) must return unknown, never not_satisfied."""
@@ -204,13 +260,6 @@ class TestEligibilityEngineOperatorsAndSafety:
         res_inf = EligibilityEngine.evaluate_condition(cond_inf, {"age": 25})
         assert res_inf.status == "unknown"
         assert "Invalid scheme rule configuration" in res_inf.explanation
-
-    def test_in_operator_invalid_rule_configuration(self):
-        """Expected value for 'in' operator must be a collection; non-collection returns unknown rule error."""
-        cond_in_bad = {"condition_name": "Category In", "field": "category", "operator": "in", "expected_value": 12345, "explanation": "Invalid in"}
-        res_in = EligibilityEngine.evaluate_condition(cond_in_bad, {"category": "General"})
-        assert res_in.status == "unknown"
-        assert "Invalid scheme rule configuration" in res_in.explanation
 
     def test_unsupported_operator(self):
         """Unsupported operator returns unknown status."""
@@ -488,3 +537,45 @@ class TestSchemeSourceMetadataVerification:
         assert "DEMO / TEST DATA" in data["source_verification_details"]
         assert data["source_last_verified_at"] is not None
         assert "JanMitra Assist is an advisory preparation platform" in data["advisory_notice"]
+
+    def test_new_scheme_defaults_to_pending_verification_without_invented_timestamp(self):
+        """Newly created schemes must default to 'Pending Verification' with null verified timestamp."""
+        from app.models.scheme import Scheme
+
+        new_scheme = Scheme(
+            id=uuid.uuid4(),
+            scheme_name="Unverified State Welfare Scheme",
+            description="Newly drafted scheme pending verification",
+            department="State Department",
+            eligibility_summary="Pending guidelines check",
+            official_source_url="https://state.gov.in/scheme",
+            official_application_url="https://state.gov.in/apply",
+        )
+        assert new_scheme.source_freshness_status == "Pending Verification"
+        assert new_scheme.source_last_verified_at is None
+
+    def test_stale_and_review_required_freshness_states(self):
+        """Scheme sources can be marked as 'Review Required' or 'Stale' when guidelines change."""
+        from app.models.scheme import Scheme
+
+        scheme = Scheme(
+            id=uuid.uuid4(),
+            scheme_name="Existing Scheme",
+            description="Scheme requiring verification review",
+            department="Department",
+            eligibility_summary="Summary",
+            official_source_url="https://gov.in",
+            official_application_url="https://gov.in/apply",
+            source_freshness_status="Review Required",
+        )
+        assert scheme.source_freshness_status == "Review Required"
+
+        scheme.source_freshness_status = "Stale"
+        assert scheme.source_freshness_status == "Stale"
+
+    def test_age_calculation_no_unsupported_general_clauses_act_claim(self):
+        """Docstring and comments must not claim General Clauses Act Section 9 mandates leap-year birthdays."""
+        doc_normalized = " ".join((EligibilityEngine.calculate_age.__doc__ or "").split())
+        assert "Section 9 of the General Clauses Act, 1897 governs commencement and termination of time periods" in doc_normalized
+        assert "does not establish a direct legal rule for leap-year birthdays" in doc_normalized
+        assert "Scheme-specific official age cutoff rules must always take priority" in doc_normalized

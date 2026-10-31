@@ -349,21 +349,43 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green.shade300),
-                      ),
-                      child: Text(
-                        scheme.sourceFreshnessStatus,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green.shade800,
-                        ),
-                      ),
+                    Builder(
+                      builder: (context) {
+                        Color bgColor = Colors.blueGrey.shade50;
+                        Color borderColor = Colors.blueGrey.shade300;
+                        Color textColor = Colors.blueGrey.shade800;
+
+                        if (scheme.sourceFreshnessStatus.contains('Verified')) {
+                          bgColor = Colors.green.shade50;
+                          borderColor = Colors.green.shade300;
+                          textColor = Colors.green.shade800;
+                        } else if (scheme.sourceFreshnessStatus == 'Review Required') {
+                          bgColor = Colors.amber.shade50;
+                          borderColor = Colors.amber.shade400;
+                          textColor = Colors.amber.shade900;
+                        } else if (scheme.sourceFreshnessStatus == 'Stale') {
+                          bgColor = Colors.red.shade50;
+                          borderColor = Colors.red.shade300;
+                          textColor = Colors.red.shade800;
+                        }
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: bgColor,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Text(
+                            scheme.sourceFreshnessStatus,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 10),
                     Text(

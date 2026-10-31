@@ -18,7 +18,7 @@ class EligibilityEngine:
     """
 
     SUPPORTED_OPERATORS = {"eq", "neq", "gt", "gte", "lt", "lte", "in", "contains"}
-    CONTROLLED_FIELDS = {"residence_type", "state", "gender", "category"}
+    CONTROLLED_FIELDS = {"residence_type", "state", "gender", "category", "occupation"}
 
     @staticmethod
     def calculate_age(
@@ -31,25 +31,21 @@ class EligibilityEngine:
         Parameters:
         - dob_val: Date of birth as date, datetime, or ISO string.
         - reference_date: Official scheme cutoff date (defaults to date.today()).
-          Different government notifications specify distinct cutoff dates
-          (e.g., January 1, July 1, or application closing date) rather than the
-          dynamic date of form submission.
+          Scheme-specific official age cutoff rules take priority (e.g. notifications
+          specifying age as of January 1, July 1, or application closing date).
         - feb29_convention: Handling of February 29 birthdays in common (non-leap) years:
-          * 'statutory_anniversary' (default): Common law / Indian statutory convention
-            (e.g., General Clauses Act, Section 9). A person legally attains a given age
-            on the day following the completion of 365 days. In a non-leap year of 28
-            days, 365 full days elapse at midnight on Feb 28, meaning the statutory
-            anniversary is attained on March 1.
-          * 'end_of_february': Administrative convention used by certain departments
-            where a person born on Feb 29 is deemed to have completed that year by the
-            close of February (February 28 in common years).
+          * 'statutory_anniversary' (default technical convention): Deems anniversary to occur
+            on March 1 after 365 complete calendar days elapse in common years.
+          * 'end_of_february': Administrative convention where the anniversary is deemed to
+            occur on the final day of February (February 28).
             
-        Note on Statutory & Administrative Conventions:
-        No single leap-year convention is universally applicable to all government
-        departments and schemes across central and state jurisdictions. By providing
-        both 'statutory_anniversary' and 'end_of_february' conventions alongside
-        configurable scheme reference cutoff dates, the engine respects scheme-specific
-        statutory rules.
+        Technical Implementation Note (No Universal Legal Rule):
+        Neither convention represents a universal Indian legal mandate. Section 9 of the
+        General Clauses Act, 1897 governs commencement and termination of time periods (e.g.,
+        excluding/including boundary days in statutory intervals) and does not establish a
+        direct legal rule for leap-year birthdays. Therefore, this technical default is strictly
+        an implementation convention, not a universal Indian legal mandate. Scheme-specific
+        official age cutoff rules must always take priority where specified.
         """
         if not dob_val:
             return None
@@ -217,7 +213,8 @@ class EligibilityEngine:
                 )
 
         # 4. Collection operator rule configuration validation
-        if op == "in" and not isinstance(expected, (list, tuple, set, str)):
+        # Reject plain strings and non-collections: 'in' strictly requires list, tuple, or set.
+        if op == "in" and (not isinstance(expected, (list, tuple, set)) or isinstance(expected, (str, bytes))):
             return ConditionEvaluation(
                 condition_name=cond_name,
                 field=field,
@@ -225,7 +222,7 @@ class EligibilityEngine:
                 expected_value=expected,
                 actual_value=actual,
                 status="unknown",
-                explanation=f"Invalid scheme rule configuration: expected value for 'in' operator must be a collection, got {type(expected).__name__}.",
+                explanation=f"Invalid scheme rule configuration: expected value for 'in' operator must be a collection (list, tuple, or set), got {type(expected).__name__}.",
             )
 
         # 5. Missing or unrecorded profile fact -> UNKNOWN (Missing from profile)
@@ -336,31 +333,46 @@ class EligibilityEngine:
                     is_satisfied = num_actual <= num_expected
 
             elif op == "in":
-                # Expected must be a collection of valid values
-                if isinstance(expected, (list, tuple, set)):
+                # Expected must be a valid collection (list, tuple, set) - reject plain string
+                if isinstance(expected, (list, tuple, set)) and not isinstance(expected, (str, bytes)):
                     lowered_expected = [str(e).strip().casefold() for e in expected if e is not None]
                     actual_str = str(actual).strip().casefold()
                     if field == "state" and ("all india" in lowered_expected or "all" in lowered_expected):
                         is_satisfied = True
                     else:
                         is_satisfied = actual_str in lowered_expected
-                elif isinstance(expected, str):
-                    is_satisfied = str(actual).strip().casefold() == expected.strip().casefold()
                 else:
-                    is_satisfied = actual == expected
+                    return ConditionEvaluation(
+                        condition_name=cond_name,
+                        field=field,
+                        operator=op,
+                        expected_value=expected,
+                        actual_value=actual,
+                        status="unknown",
+                        explanation=f"Invalid scheme rule configuration: expected value for 'in' operator must be a collection (list, tuple, or set), got {type(expected).__name__}.",
+                    )
 
             elif op == "contains":
-                # Substring or token matching
                 actual_str = str(actual).strip().casefold()
                 expected_str = str(expected).strip().casefold()
                 # Empty expected string must never match
                 if not expected_str or not actual_str:
                     is_satisfied = False
                     eval_note = "Empty substring or target."
-                elif isinstance(actual, (list, tuple, set)):
-                    is_satisfied = any(expected_str == str(item).strip().casefold() for item in actual)
+                elif field in cls.CONTROLLED_FIELDS:
+                    # Prevent ambiguous substring matching for controlled profile fields
+                    # (residence_type, state, gender, category, occupation).
+                    # Use normalized exact matching for controlled profile values.
+                    if isinstance(actual, (list, tuple, set)):
+                        is_satisfied = any(expected_str == str(item).strip().casefold() for item in actual)
+                    else:
+                        is_satisfied = actual_str == expected_str
                 else:
-                    is_satisfied = expected_str in actual_str
+                    # Retain substring matching only where its use is explicitly justified (free-form text fields)
+                    if isinstance(actual, (list, tuple, set)):
+                        is_satisfied = any(expected_str in str(item).strip().casefold() for item in actual)
+                    else:
+                        is_satisfied = expected_str in actual_str
 
         except Exception as ex:
             is_satisfied = False

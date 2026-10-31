@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.add_column('schemes', sa.Column('required_documents', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False, comment='Informational checklist'))
     op.add_column('schemes', sa.Column('eligibility_source_reference', sa.String(length=500), nullable=True, comment='Supporting official source reference for eligibility criteria'))
     op.add_column('schemes', sa.Column('benefits_source_reference', sa.String(length=500), nullable=True, comment='Supporting official source reference for scheme benefits'))
-    op.add_column('schemes', sa.Column('source_freshness_status', sa.String(length=50), server_default='Verified Official Source', nullable=False, comment='Verification freshness status'))
+    op.add_column('schemes', sa.Column('source_freshness_status', sa.String(length=50), server_default='Pending Verification', nullable=False, comment='Verification freshness status: Pending Verification, Verified Official Source, Review Required, Stale'))
     op.add_column('schemes', sa.Column('source_verification_details', sa.Text(), nullable=True, comment='Supporting official source verification references and limitations'))
     
     op.add_column('schemes', sa.Column('status', sa.String(length=20), server_default='active', nullable=False, comment='active, inactive, discontinued'))
