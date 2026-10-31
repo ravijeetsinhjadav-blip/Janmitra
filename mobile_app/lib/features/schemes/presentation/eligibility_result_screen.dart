@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../profile/presentation/screens/profile_setup_screen.dart';
 import '../../readiness/presentation/screens/ai_advisory_screen.dart';
+import '../../assistance/presentation/screens/application_assistance_screen.dart';
 import '../models/scheme_models.dart';
 
 class EligibilityResultScreen extends StatelessWidget {
@@ -242,6 +243,25 @@ class EligibilityResultScreen extends StatelessWidget {
                             builder: (_) => AIAdvisoryScreen(
                               schemeId: assessment.schemeId,
                               assessmentId: assessment.assessmentId,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.assignment_turned_in_outlined, size: 16),
+                      label: const Text('Prepare Application & Interactive Checklist'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryBlue,
+                        side: const BorderSide(color: AppTheme.primaryBlue),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ApplicationAssistanceScreen(
+                              schemeId: assessment.schemeId,
+                              schemeName: assessment.schemeName,
                             ),
                           ),
                         );

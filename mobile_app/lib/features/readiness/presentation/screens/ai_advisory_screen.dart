@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../documents/presentation/screens/document_vault_screen.dart';
+import '../../../assistance/presentation/screens/application_assistance_screen.dart';
 import '../../models/advisory_models.dart';
 import '../../services/advisory_service.dart';
 
@@ -574,6 +575,32 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                   const SizedBox(height: 6),
                   Text(guidance.officialPortalGuidance, style: const TextStyle(fontSize: 12, height: 1.3, color: Colors.black87)),
                   const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ApplicationAssistanceScreen(
+                                  schemeId: adv.schemeId,
+                                  schemeName: adv.schemeName,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.assignment_turned_in_outlined, size: 16),
+                          label: const Text('Prepare Application with Checklist'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryBlue,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: adv.officialApplicationUrl));

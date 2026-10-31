@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, schemes, users, documents, advisory
+from app.api.v1.endpoints import auth, schemes, users, documents, advisory, assistance
 
 api_router = APIRouter()
 
@@ -17,6 +17,10 @@ api_router.include_router(documents.router, prefix="/documents", tags=["Document
 
 # AI Advisory & Readiness Assessment Engine (Phase 6)
 api_router.include_router(advisory.router, tags=["AI Advisory & Readiness"])
+
+# Application Assistance Module (Phase 7.1)
+api_router.include_router(assistance.router, prefix="/assistance", tags=["Application Assistance"])
+
 
 
 

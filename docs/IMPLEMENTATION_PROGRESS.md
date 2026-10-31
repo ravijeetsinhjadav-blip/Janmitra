@@ -2,7 +2,7 @@
 
 **Project Name:** JanMitra Assist – AI-Powered Government Service Eligibility and Document Intelligence System  
 **Academic Target:** MCA Major Project  
-**Current Phase:** Phase 6 (AI Advisory & Readiness Assessment Engine) – COMPLETED & AUDITED
+**Current Phase:** Phase 7.1 (Application Assistance Module) – COMPLETED & VERIFIED
 
 
 ---
@@ -322,5 +322,73 @@
 
 ---
 
-- [ ] **Phase 7:** Assisted Service, Subscription & Payment Integration (PENDING USER INITIATION)
+## 3. Phase 7.1 Implementation: Application Assistance Module
+
+### Task A: Data Models & API Schemas
+- Implemented comprehensive Pydantic schemas in `backend/app/schemas/assistance.py`:
+  - `DocumentPreparationStatusItem`: Status classification (`Ready for Application Preparation`, `Available`, `Missing`, `Manual Review Required`, `Needs Correction`, `Processing Failed`).
+  - `ChecklistItem`: Actionable requirement tracking (`document`, `profile_field`, `declaration`, `portal_action`), mandatory flag, and completion state.
+  - `ApplicantInfoRequirement`: Detailed demographic/administrative portal fields.
+  - `SupportingDocumentSpecification`: Acceptable formats, file sizes, validity periods, and recognized issuing authorities.
+  - `PortalStepInstruction`: Sequence of steps on the official government portal.
+  - `ApplicationInfoGuide`: Complete scheme-specific preparation guide with common mistakes and precautions.
+  - `ApplicationAssistanceResponse`: Aggregated response connecting scheme discovery, eligibility assessment, readiness score, document vault statuses, interactive checklist, and official portal directions.
+  - `ChecklistUpdateResponse`: Interactive toggle response with progress metrics.
+
+### Task B: Assistance Service & Preparation Logic
+- Created `AssistanceService` in `backend/app/services/assistance_service.py`:
+  - `generate_or_get_assistance`: Synthesizes scheme information, citizen profile, uploaded vault documents, readiness scores, and AI/RAG guide into a personalized application preparation packet.
+  - **Document Classification Logic:**
+    - `Ready for Application Preparation`: Document uploaded with high OCR confidence (>=0.70) and no manual review flag.
+    - `Manual Review Required`: Document flagged for manual inspection or has OCR confidence <0.70.
+    - `Processing Failed`: Document encountered `OCR_FAILED`.
+    - `Needs Correction`: Document has unresolved profile-vault inconsistencies.
+    - `Missing`: Required document not found in citizen's vault.
+  - **Normalized Civic Document Matching:** Added `_match_doc_types` to normalize whitespace, underscores, and common civic document root tokens (`aadhaar`, `ration`, `caste`, `domicile`, `residence`, `income`, `land`, `passbook`, `bank`).
+  - **Checklist State Persistence:** Maintained per-citizen, per-scheme checklist completion state in `Assessment.result_data["completed_checklist_items"]` (JSONB) without requiring database migrations.
+  - `toggle_checklist_item`: Safely adds/removes item IDs in `completed_checklist_items` with IDOR validation (verifying user ownership of the assessment).
+
+### Task C: Multilingual LLM Application Guide Generation
+- Extended `BaseLLMAdapter`, `GeminiLLMAdapter`, and `MockLLMAdapter` in `backend/app/services/llm_service.py`:
+  - `ApplicationGuideLLMOutputSchema`: Strict Pydantic schema validation for LLM responses.
+  - Multilingual support: Authentic civic guidance in English (`en`), Hindi (`hi`), and Gujarati (`gu`).
+  - Common Mistakes Highlights: Outdated IFSC codes for merged public sector banks (e.g., Allahabad Bank, Syndicate Bank, Corporation Bank), spelling discrepancies between Aadhaar and bank passbooks, expired income/caste certificates, and land area unit conversions (Bigha/Guntha to Hectares/Acres).
+  - Security hardening: Prompt injection defense via XML delimiters and PII minimization (masking Aadhaar and phone numbers).
+  - Production safety: Strict block preventing mock LLM execution in production mode.
+
+### Task D: API Endpoints
+- Mounted under prefix `/api/v1/assistance` in `backend/app/api/v1/endpoints/assistance.py`:
+  - `POST /api/v1/assistance/schemes/{scheme_id}/prepare`: Prepares or retrieves personalized assistance for authenticated citizen.
+  - `PATCH /api/v1/assistance/schemes/{scheme_id}/checklist/{item_id}`: Toggles interactive preparation checklist item completion.
+  - `GET /api/v1/assistance/schemes/{scheme_id}/guide`: Public/authenticated retrieval of scheme information guide.
+
+### Task E: Flutter Application Assistance Client
+- Built Flutter client feature under `mobile_app/lib/features/assistance/`:
+  - `models/assistance_models.dart`: Complete deserialization and data structures for assistance responses, checklists, guides, and status items.
+  - `services/assistance_service.dart`: API client methods with JWT token headers.
+  - `presentation/screens/application_assistance_screen.dart`:
+    - Statutory Non-Submission Advisory Banner at the top.
+    - Scheme header with category, department, and demo data badge.
+    - Multilingual language toggle chips (`English`, `हिंदी`, `ગુજરાતી`) with immediate reloading.
+    - Readiness Overview with Criteria Match % and Overall Readiness Score.
+    - Interactive Preparation Checklist with progress bar ("X of Y done"), individual checkboxes, and non-submission alert.
+    - Document Preparation Status list with visual badges and "Open Vault" navigation.
+    - Scheme Information Guide with expandable cards: Common Mistakes to Avoid, Submission Precautions, Required Info, Document Specs, Declarations, and Portal Filing Sequence.
+    - Official Government Portal card with verified URL and clipboard copy action.
+- Integrated Navigation:
+  - Added "Application Preparation & Checklists" card to `home_screen.dart`.
+  - Added "Prepare Application with Checklist" button to `ai_advisory_screen.dart`.
+  - Added "Prepare Application & Interactive Checklist" button to `eligibility_result_screen.dart`.
+  - Added "Prepare Application Guide & Checklist" button to `scheme_details_screen.dart`.
+
+### Task F: Verification & Quality Assurance
+- **Backend Tests:** **108 passed, 1 skipped (live PostgreSQL), 0 failed** across 109 tests:
+  - 9 dedicated Phase 7.1 assistance tests covering preparation, missing/available document classification, OCR failed/review statuses, interactive checklist toggling, IDOR access protection, 404 validation, multilingual Hindi/Gujarati outputs, and public guide endpoints.
+- **Flutter Tests:** **24 passed, 0 failed** across `assistance_widgets_test.dart`, `advisory_widgets_test.dart`, `document_widgets_test.dart`, `scheme_widgets_test.dart`, and `widget_test.dart`.
+- **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+- **Database Migrations:** Clean static SQL generation verified via `alembic upgrade head --sql`.
+
+---
+
+- [ ] **Phase 7.2:** Assisted Service, Subscription & Payment Integration (PENDING USER INITIATION)
 - [ ] **Phase 8:** Final Hardening, Integration & Academic Defense Preparation (PENDING USER INITIATION)

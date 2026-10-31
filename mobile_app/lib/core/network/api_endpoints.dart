@@ -41,7 +41,12 @@ class ApiEndpoints {
   static String assessmentAdvisory(String assessmentId) => '/api/v1/advisory/assessments/$assessmentId';
   static String assessmentRegenerate(String assessmentId) => '/api/v1/advisory/assessments/$assessmentId/regenerate';
 
-  // Future phase endpoints (Phases 7-8)
-  static const String readiness = '/api/v1/readiness';
+  // Phase 7.1 Application Assistance Module
+  static const String assistance = '/api/v1/assistance';
+  static String schemeAssistancePrepare(String schemeId) => '/api/v1/assistance/schemes/$schemeId/prepare';
+  static String schemeAssistanceChecklistToggle(String schemeId, String itemId) => '/api/v1/assistance/schemes/$schemeId/checklist/$itemId';
+  static String schemeAssistanceGuide(String schemeId) => '/api/v1/assistance/schemes/$schemeId/guide';
 
+  // Future phase endpoints (Phases 7.2-8)
+  static const String readiness = '/api/v1/readiness';
 }

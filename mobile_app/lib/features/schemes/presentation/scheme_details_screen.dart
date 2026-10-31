@@ -5,6 +5,7 @@ import '../models/scheme_models.dart';
 import '../services/scheme_service.dart';
 import 'eligibility_result_screen.dart';
 import '../../documents/presentation/widgets/scheme_document_checklist_widget.dart';
+import '../../assistance/presentation/screens/application_assistance_screen.dart';
 
 
 
@@ -450,6 +451,26 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                 textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               onPressed: _isAssessing ? null : _handleCheckEligibility,
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.primaryBlue),
+              label: const Text('Prepare Application Guide & Checklist'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryBlue,
+                side: const BorderSide(color: AppTheme.primaryBlue),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ApplicationAssistanceScreen(
+                      schemeId: widget.scheme.id,
+                      schemeName: widget.scheme.schemeName,
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
           ],

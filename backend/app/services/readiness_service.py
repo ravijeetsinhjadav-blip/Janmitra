@@ -11,6 +11,18 @@ from app.core.logging import get_logger
 logger = get_logger("janmitra.readiness_service")
 
 
+def _match_doc_types(req_name: str, doc_type: str) -> bool:
+    """Robust normalized matching for Indian civic document types."""
+    r = re.sub(r"[_\s]+", " ", req_name.strip().lower())
+    d = re.sub(r"[_\s]+", " ", doc_type.strip().lower())
+    if r in d or d in r:
+        return True
+    for root in ["aadhaar", "ration", "caste", "domicile", "residence", "income", "land", "passbook", "bank"]:
+        if root in r and root in d:
+            return True
+    return False
+
+
 class ReadinessService:
     """Computes transparent, multi-dimensional application readiness metrics and performs
     cross-validation between citizen profile data and OCR-extracted document records.
@@ -68,11 +80,10 @@ class ReadinessService:
 
         for req in scheme_required_docs:
             req_clean = req.strip()
-            # Find all uploaded documents matching required type
+            # Find all uploaded documents matching required type using normalized matcher
             matching_docs = [
                 doc for doc in documents
-                if req_clean.lower() in doc.document_type.strip().lower()
-                or doc.document_type.strip().lower() in req_clean.lower()
+                if _match_doc_types(req_clean, doc.document_type)
             ]
 
             if not matching_docs:
