@@ -106,6 +106,11 @@ class Scheme(Base):
         nullable=True,
         comment="Timestamp when scheme source information was last verified",
     )
+    source_verification_details = Column(
+        Text,
+        nullable=True,
+        comment="Supporting official source verification references and limitations",
+    )
     status = Column(
         String(20),
         nullable=False,

@@ -190,7 +190,7 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Readiness: ${item.overallReadinessScore.toInt()}%',
+                        'Criteria Match: ${item.criteriaMatchPercentage.toInt()}%',
                         style: const TextStyle(fontSize: 11, color: Colors.black54),
                       ),
                     ],

@@ -117,9 +117,38 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
       onRefresh: _loadRecommendations,
       child: ListView.builder(
         padding: const EdgeInsets.all(16.0),
-        itemCount: _recommendations.length,
+        itemCount: _recommendations.length + 1,
         itemBuilder: (context, index) {
-          final item = _recommendations[index];
+          if (index == 0) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 20, color: Colors.amber.shade900),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Advisory Recommendations: Suggested based solely on your entered profile parameters. These are not government approval guarantees.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          final item = _recommendations[index - 1];
           return _buildRecommendationCard(item);
         },
       ),
@@ -169,7 +198,7 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${rec.matchScore.toInt()}% Match',
+                      '${rec.criteriaMatchPercentage.toInt()}% Match',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,

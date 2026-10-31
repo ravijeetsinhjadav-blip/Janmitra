@@ -411,14 +411,15 @@ Verified **0 issues found**.
 ### 10.1 Deterministic Eligibility Engine
 The core rule evaluation engine (`EligibilityEngine` in `backend/app/services/eligibility_service.py`) deterministically checks citizen profile attributes against structured rule conditions:
 - **Supported Comparison Operators:** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `contains`.
-- **Dynamic Age Calculation:** Derived dynamically from citizen `date_of_birth` without requiring manual age entry.
+- **Dynamic Age Calculation:** Derived dynamically from citizen `date_of_birth` taking leap years and exact birthday anniversaries into account.
 - **Handling Incomplete Profiles:** If a required fact is absent, the condition is classified as `unknown` (never failed), and the overall determination is set to `Insufficient Information` with actionable guidance on missing fields.
 - **Explainable Outcomes:** Detailed condition-by-condition analysis with actual vs expected values and plain-language explanations.
-- **Advisory Readiness Score:** Calculated on a 0.0% to 100.0% scale reflecting application preparedness.
+- **Criteria Match Percentage:** Calculated on a 0.0% to 100.0% scale representing the proportion of verified conditions satisfied. It explicitly does **NOT** represent official government approval probability.
+- **Mandatory Failure Exclusion:** Any failed mandatory eligibility condition excludes the scheme from recommended matches.
 - **Statutory Advisory Disclaimer:** All assessments explicitly state they are advisory only and do not replace official government determinations.
 
 ### 10.2 Curated Verified Government Schemes (Demo Data)
-Includes 5 seed schemes with authentic nodal links:
+Includes 5 seed schemes with authentic nodal links, verified supporting documentation notes (`source_verification_details`), and `is_demo_data=True` flags:
 1. **PM-KISAN:** Central sector scheme providing ₹6,000/year to landholding farmer families (`https://pmkisan.gov.in/`).
 2. **Ayushman Bharat (AB-PMJAY):** Secondary and tertiary healthcare coverage up to ₹5 Lakh/family/year (`https://pmjay.gov.in/`).
 3. **PMAY-G (Gramin):** Rural housing assistance for pucca house construction (`https://pmayg.nic.in/`).

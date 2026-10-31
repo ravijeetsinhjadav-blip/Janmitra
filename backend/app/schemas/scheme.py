@@ -45,6 +45,7 @@ class SchemeBase(BaseModel):
     official_source_url: str
     official_application_url: str
     source_last_verified_at: Optional[datetime] = None
+    source_verification_details: Optional[str] = None
     status: str = "active"
     is_active: bool = True
     is_demo_data: bool = False
@@ -83,10 +84,15 @@ class SchemeRecommendation(BaseModel):
     """Profile-based scheme recommendation for authenticated citizen."""
     scheme: SchemeResponse
     recommendation_reason: str
-    match_score: float = Field(..., description="Percentage of evaluated conditions satisfied")
+    criteria_match_percentage: float = Field(..., description="Proportion of evaluated conditions satisfied based on profile (0-100%). Not an approval probability.")
+    match_score: float = Field(..., description="Alias for criteria_match_percentage for backward compatibility")
     satisfied_count: int
     unknown_count: int
     missing_profile_fields: List[str] = Field(default_factory=list)
+    advisory_notice: str = (
+        "Recommendations are advisory suggestions based solely on your entered profile "
+        "and do not guarantee eligibility or official government approval."
+    )
 
 
 class AssessmentResultResponse(BaseModel):
@@ -99,7 +105,16 @@ class AssessmentResultResponse(BaseModel):
         ...,
         description="'Potentially Eligible', 'Not Eligible Based on Available Information', or 'Insufficient Information'",
     )
-    overall_readiness_score: float = Field(..., description="Advisory score (0.0 to 100.0)")
+    criteria_match_percentage: float = Field(..., description="Proportion of verified conditions satisfied (0.0 to 100.0). Not an approval likelihood.")
+    overall_readiness_score: float = Field(..., description="Alias for criteria_match_percentage for backward compatibility")
+    score_interpretation: str = Field(
+        default=(
+            "Criteria Match Percentage indicates the proportion of predefined scheme conditions "
+            "that are verified as satisfied based on your profile. It does NOT represent a probability "
+            "or guarantee of official government approval."
+        ),
+        description="Clear explanation of score interpretation",
+    )
     conditions_breakdown: List[ConditionEvaluation]
     satisfied_count: int
     not_satisfied_count: int
@@ -122,6 +137,7 @@ class AssessmentHistoryItem(BaseModel):
     scheme_id: Optional[UUID] = None
     scheme_name: str
     overall_status: str
+    criteria_match_percentage: float
     overall_readiness_score: float
     satisfied_count: int
     not_satisfied_count: int

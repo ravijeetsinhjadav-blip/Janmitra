@@ -50,7 +50,10 @@ void main() {
     schemeName: sampleScheme.schemeName,
     category: sampleScheme.category,
     overallStatus: 'Potentially Eligible',
+    criteriaMatchPercentage: 100.0,
     overallReadinessScore: 100.0,
+    scoreInterpretation:
+        'Criteria Match Percentage indicates that 1 of 1 conditions (100.0%) are satisfied.',
     conditionsBreakdown: [
       ConditionEvaluationModel(
         conditionName: 'Agricultural Occupation',

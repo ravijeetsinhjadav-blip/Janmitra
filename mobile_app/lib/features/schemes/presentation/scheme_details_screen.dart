@@ -356,6 +356,20 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                       'Official Guidelines Source:\n${scheme.officialSourceUrl}',
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
+                    if (scheme.sourceVerificationDetails != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Verification Note: ${scheme.sourceVerificationDetails}',
+                        style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade700),
+                      ),
+                    ],
+                    if (scheme.sourceLastVerifiedAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Last Verified: ${scheme.sourceLastVerifiedAt!.split("T").first}',
+                        style: const TextStyle(fontSize: 11, color: Colors.black45),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     TextButton.icon(
                       icon: const Icon(Icons.copy, size: 16),

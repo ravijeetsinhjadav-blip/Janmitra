@@ -68,6 +68,7 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://pmkisan.gov.in/",
         "official_application_url": "https://pmkisan.gov.in/RegistrationFormNew.aspx",
         "source_last_verified_at": datetime(2026, 1, 15, tzinfo=timezone.utc),
+        "source_verification_details": "Verified against PM-KISAN operational guidelines (pmkisan.gov.in). Note: Cultivable landholding records must be validated during official state portal registration.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -119,6 +120,7 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://pmjay.gov.in/",
         "official_application_url": "https://beneficiary.nha.gov.in/",
         "source_last_verified_at": datetime(2026, 2, 10, tzinfo=timezone.utc),
+        "source_verification_details": "Verified against NHA guidelines (pmjay.gov.in). Note: Entitlement depends on SECC 2011 / state target database match verified at empaneled hospitals.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -169,6 +171,7 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://pmayg.nic.in/",
         "official_application_url": "https://pmayg.nic.in/netiay/home.aspx",
         "source_last_verified_at": datetime(2026, 1, 20, tzinfo=timezone.utc),
+        "source_verification_details": "Verified against MoRD scheme guidelines (pmayg.nic.in). Note: Gram Sabha beneficiary priority list and site geo-tagging required by nodal officers.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -227,6 +230,7 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://scholarships.gov.in/",
         "official_application_url": "https://scholarships.gov.in/fresh/newstdRegfrmInstruction",
         "source_last_verified_at": datetime(2026, 2, 1, tzinfo=timezone.utc),
+        "source_verification_details": "Verified from NSP guidance (scholarships.gov.in). Note: Institute verification and student biometric e-KYC are mandatory on the portal.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -278,6 +282,7 @@ DEMO_SCHEMES_SEED = [
         "official_source_url": "https://www.jeevandayee.gov.in/",
         "official_application_url": "https://www.jeevandayee.gov.in/",
         "source_last_verified_at": datetime(2026, 2, 5, tzinfo=timezone.utc),
+        "source_verification_details": "Verified from State Health Assurance Society portal (jeevandayee.gov.in). Note: Valid Maharashtra ration card must be produced at network hospitals.",
         "status": "active",
         "is_active": True,
         "is_demo_data": True,
@@ -402,13 +407,18 @@ class SchemeService:
         eval_result = EligibilityEngine.evaluate_scheme(scheme, user.profile)
 
         # Store assessment run in database
+        criteria_match_pct = eval_result["criteria_match_percentage"]
+        score_interp = eval_result["score_interpretation"]
+
         assessment = Assessment(
             user_id=user.id,
             scheme_id=scheme.id,
             assessment_type="scheme_eligibility",
             result_data={
                 "overall_status": eval_result["overall_status"],
-                "overall_readiness_score": eval_result["overall_readiness_score"],
+                "criteria_match_percentage": criteria_match_pct,
+                "overall_readiness_score": criteria_match_pct,
+                "score_interpretation": score_interp,
                 "scheme_name": scheme.scheme_name,
                 "category": scheme.category,
                 "satisfied_count": eval_result["satisfied_count"],
@@ -418,7 +428,7 @@ class SchemeService:
                 "conditions_breakdown": [c.model_dump() for c in eval_result["conditions_breakdown"]],
                 "evaluated_at": eval_result["evaluated_at"].isoformat(),
             },
-            overall_readiness_score=eval_result["overall_readiness_score"],
+            overall_readiness_score=criteria_match_pct,
         )
         db.add(assessment)
         db.commit()
@@ -430,7 +440,9 @@ class SchemeService:
             scheme_name=scheme.scheme_name,
             category=scheme.category,
             overall_status=eval_result["overall_status"],
-            overall_readiness_score=eval_result["overall_readiness_score"],
+            criteria_match_percentage=criteria_match_pct,
+            overall_readiness_score=criteria_match_pct,
+            score_interpretation=score_interp,
             conditions_breakdown=eval_result["conditions_breakdown"],
             satisfied_count=eval_result["satisfied_count"],
             not_satisfied_count=eval_result["not_satisfied_count"],
@@ -462,13 +474,15 @@ class SchemeService:
         history: List[AssessmentHistoryItem] = []
         for a in records:
             res_data = a.result_data or {}
+            score = float(res_data.get("criteria_match_percentage", a.overall_readiness_score or 0.0))
             history.append(
                 AssessmentHistoryItem(
                     assessment_id=a.id,
                     scheme_id=a.scheme_id,
                     scheme_name=res_data.get("scheme_name", "Government Scheme Assessment"),
                     overall_status=res_data.get("overall_status", "Evaluated"),
-                    overall_readiness_score=a.overall_readiness_score or 0.0,
+                    criteria_match_percentage=score,
+                    overall_readiness_score=score,
                     satisfied_count=res_data.get("satisfied_count", 0),
                     not_satisfied_count=res_data.get("not_satisfied_count", 0),
                     unknown_count=res_data.get("unknown_count", 0),
@@ -500,6 +514,7 @@ class SchemeService:
 
         breakdown_dicts = res_data.get("conditions_breakdown", [])
         evaluations = [ConditionEvaluation(**b) for b in breakdown_dicts]
+        score = float(res_data.get("criteria_match_percentage", assessment.overall_readiness_score or 0.0))
 
         return AssessmentResultResponse(
             assessment_id=assessment.id,
@@ -507,7 +522,12 @@ class SchemeService:
             scheme_name=res_data.get("scheme_name", scheme.scheme_name if scheme else "Scheme Assessment"),
             category=res_data.get("category", scheme.category if scheme else "General"),
             overall_status=res_data.get("overall_status", "Unknown"),
-            overall_readiness_score=assessment.overall_readiness_score or 0.0,
+            criteria_match_percentage=score,
+            overall_readiness_score=score,
+            score_interpretation=res_data.get(
+                "score_interpretation",
+                f"Criteria Match Percentage indicates that {score}% of evaluated conditions are verified as satisfied. It is not an approval likelihood."
+            ),
             conditions_breakdown=evaluations,
             satisfied_count=res_data.get("satisfied_count", 0),
             not_satisfied_count=res_data.get("not_satisfied_count", 0),

@@ -84,14 +84,24 @@ class TestDatabaseModelsMetadata:
     def test_scheme_model_schema(self):
         table = Base.metadata.tables["schemes"]
         assert "scheme_name" in table.c
+        assert "short_description" in table.c
+        assert "category" in table.c
         assert "description" in table.c
         assert "department" in table.c
         assert "state_applicability" in table.c
         assert "eligibility_summary" in table.c
+        assert "benefits" in table.c
+        assert "eligibility_criteria" in table.c
+        assert "required_profile_fields" in table.c
+        assert "application_process" in table.c
+        assert "required_documents" in table.c
         assert "official_source_url" in table.c
         assert "official_application_url" in table.c
         assert "source_last_verified_at" in table.c
+        assert "source_verification_details" in table.c
+        assert "status" in table.c
         assert "is_active" in table.c
+        assert "is_demo_data" in table.c
 
     def test_document_metadata_storage_separation(self):
         table = Base.metadata.tables["document_metadata"]

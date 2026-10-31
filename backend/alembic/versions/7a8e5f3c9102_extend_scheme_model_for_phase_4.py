@@ -27,6 +27,7 @@ def upgrade() -> None:
     op.add_column('schemes', sa.Column('required_profile_fields', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False, comment='Required profile field names'))
     op.add_column('schemes', sa.Column('application_process', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False, comment='Application steps'))
     op.add_column('schemes', sa.Column('required_documents', postgresql.JSONB(astext_type=sa.Text()), server_default='[]', nullable=False, comment='Informational checklist'))
+    op.add_column('schemes', sa.Column('source_verification_details', sa.Text(), nullable=True, comment='Supporting official source verification references and limitations'))
     
     op.add_column('schemes', sa.Column('status', sa.String(length=20), server_default='active', nullable=False, comment='active, inactive, discontinued'))
     op.create_index(op.f('ix_schemes_status'), 'schemes', ['status'], unique=False)
@@ -40,6 +41,7 @@ def downgrade() -> None:
     op.drop_column('schemes', 'is_demo_data')
     op.drop_index(op.f('ix_schemes_status'), table_name='schemes')
     op.drop_column('schemes', 'status')
+    op.drop_column('schemes', 'source_verification_details')
     op.drop_column('schemes', 'required_documents')
     op.drop_column('schemes', 'application_process')
     op.drop_column('schemes', 'required_profile_fields')

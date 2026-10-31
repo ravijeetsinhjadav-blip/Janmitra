@@ -81,6 +81,7 @@ class SchemeModel {
   final String officialSourceUrl;
   final String officialApplicationUrl;
   final String? sourceLastVerifiedAt;
+  final String? sourceVerificationDetails;
   final String status;
   final bool isDemoData;
 
@@ -101,6 +102,7 @@ class SchemeModel {
     required this.officialSourceUrl,
     required this.officialApplicationUrl,
     this.sourceLastVerifiedAt,
+    this.sourceVerificationDetails,
     required this.status,
     required this.isDemoData,
   });
@@ -138,6 +140,7 @@ class SchemeModel {
       officialSourceUrl: json['official_source_url'] as String? ?? '',
       officialApplicationUrl: json['official_application_url'] as String? ?? '',
       sourceLastVerifiedAt: json['source_last_verified_at'] as String?,
+      sourceVerificationDetails: json['source_verification_details'] as String?,
       status: json['status'] as String? ?? 'active',
       isDemoData: json['is_demo_data'] as bool? ?? false,
     );
@@ -190,28 +193,36 @@ class SchemeCategoryModel {
 class SchemeRecommendationModel {
   final SchemeModel scheme;
   final String recommendationReason;
+  final double criteriaMatchPercentage;
   final double matchScore;
   final int satisfiedCount;
   final int notSatisfiedCount;
   final int unknownCount;
+  final String advisoryNotice;
 
   SchemeRecommendationModel({
     required this.scheme,
     required this.recommendationReason,
+    required this.criteriaMatchPercentage,
     required this.matchScore,
     required this.satisfiedCount,
     required this.notSatisfiedCount,
     required this.unknownCount,
+    required this.advisoryNotice,
   });
 
   factory SchemeRecommendationModel.fromJson(Map<String, dynamic> json) {
+    final score = (json['criteria_match_percentage'] ?? json['match_score'] as num?)?.toDouble() ?? 0.0;
     return SchemeRecommendationModel(
       scheme: SchemeModel.fromJson(json['scheme'] as Map<String, dynamic>),
       recommendationReason: json['recommendation_reason'] as String? ?? '',
-      matchScore: (json['match_score'] as num?)?.toDouble() ?? 0.0,
+      criteriaMatchPercentage: score,
+      matchScore: score,
       satisfiedCount: json['satisfied_count'] as int? ?? 0,
       notSatisfiedCount: json['not_satisfied_count'] as int? ?? 0,
       unknownCount: json['unknown_count'] as int? ?? 0,
+      advisoryNotice: json['advisory_notice'] as String? ??
+          'Recommendations are advisory suggestions based solely on your entered profile and do not guarantee eligibility or official government approval.',
     );
   }
 }
@@ -222,7 +233,9 @@ class AssessmentResultModel {
   final String schemeName;
   final String category;
   final String overallStatus;
+  final double criteriaMatchPercentage;
   final double overallReadinessScore;
+  final String scoreInterpretation;
   final List<ConditionEvaluationModel> conditionsBreakdown;
   final int satisfiedCount;
   final int notSatisfiedCount;
@@ -239,7 +252,9 @@ class AssessmentResultModel {
     required this.schemeName,
     required this.category,
     required this.overallStatus,
+    required this.criteriaMatchPercentage,
     required this.overallReadinessScore,
+    required this.scoreInterpretation,
     required this.conditionsBreakdown,
     required this.satisfiedCount,
     required this.notSatisfiedCount,
@@ -252,13 +267,17 @@ class AssessmentResultModel {
   });
 
   factory AssessmentResultModel.fromJson(Map<String, dynamic> json) {
+    final score = (json['criteria_match_percentage'] ?? json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0;
     return AssessmentResultModel(
       assessmentId: json['assessment_id'] as String? ?? '',
       schemeId: json['scheme_id'] as String? ?? '',
       schemeName: json['scheme_name'] as String? ?? '',
       category: json['category'] as String? ?? 'General',
       overallStatus: json['overall_status'] as String? ?? 'Unknown',
-      overallReadinessScore: (json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0,
+      criteriaMatchPercentage: score,
+      overallReadinessScore: score,
+      scoreInterpretation: json['score_interpretation'] as String? ??
+          'Criteria Match Percentage reflects the proportion of predefined conditions verified as satisfied based on your profile. It does NOT represent government approval likelihood.',
       conditionsBreakdown: (json['conditions_breakdown'] as List<dynamic>?)
               ?.map((e) => ConditionEvaluationModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -284,6 +303,7 @@ class AssessmentHistoryItemModel {
   final String? schemeId;
   final String schemeName;
   final String overallStatus;
+  final double criteriaMatchPercentage;
   final double overallReadinessScore;
   final int satisfiedCount;
   final int notSatisfiedCount;
@@ -295,6 +315,7 @@ class AssessmentHistoryItemModel {
     this.schemeId,
     required this.schemeName,
     required this.overallStatus,
+    required this.criteriaMatchPercentage,
     required this.overallReadinessScore,
     required this.satisfiedCount,
     required this.notSatisfiedCount,
@@ -303,12 +324,14 @@ class AssessmentHistoryItemModel {
   });
 
   factory AssessmentHistoryItemModel.fromJson(Map<String, dynamic> json) {
+    final score = (json['criteria_match_percentage'] ?? json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0;
     return AssessmentHistoryItemModel(
       assessmentId: json['assessment_id'] as String? ?? '',
       schemeId: json['scheme_id'] as String?,
       schemeName: json['scheme_name'] as String? ?? '',
       overallStatus: json['overall_status'] as String? ?? '',
-      overallReadinessScore: (json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0,
+      criteriaMatchPercentage: score,
+      overallReadinessScore: score,
       satisfiedCount: json['satisfied_count'] as int? ?? 0,
       notSatisfiedCount: json['not_satisfied_count'] as int? ?? 0,
       unknownCount: json['unknown_count'] as int? ?? 0,
@@ -316,4 +339,3 @@ class AssessmentHistoryItemModel {
     );
   }
 }
-

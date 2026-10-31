@@ -133,16 +133,16 @@ class EligibilityResultScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Readiness Score Gauge
+                    // Criteria Match Percentage Gauge (Not approval probability)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Estimated Readiness Score:',
+                          'Criteria Match Percentage:',
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          '${assessment.overallReadinessScore.toInt()}%',
+                          '${assessment.criteriaMatchPercentage.toInt()}%',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -155,10 +155,22 @@ class EligibilityResultScreen extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: LinearProgressIndicator(
-                        value: (assessment.overallReadinessScore / 100).clamp(0.0, 1.0),
+                        value: (assessment.criteriaMatchPercentage / 100).clamp(0.0, 1.0),
                         minHeight: 8,
                         backgroundColor: Colors.grey.shade200,
                         valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        assessment.scoreInterpretation,
+                        style: const TextStyle(fontSize: 11, color: Colors.black87, height: 1.3),
                       ),
                     ),
                     const SizedBox(height: 16),
