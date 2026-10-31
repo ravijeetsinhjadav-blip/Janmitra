@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException, status
 
 from app.models.subscription import Subscription, UserMonthlyQuota, PLAN_TYPES, BILLING_CYCLES
@@ -101,8 +102,7 @@ class SubscriptionService:
             if end_utc and end_utc < now:
                 logger.info(f"Subscription {sub.id} for user {user_id} expired on {sub.end_date}")
                 sub.status = "expired"
-                db.commit()
-                db.refresh(sub)
+                db.flush()
                 sub = None
 
         if not sub:
@@ -116,18 +116,30 @@ class SubscriptionService:
                 .first()
             )
             if not sub:
-                sub = Subscription(
-                    id=uuid.uuid4(),
-                    user_id=user_id,
-                    plan_type="free",
-                    billing_cycle=None,
-                    status="active",
-                    start_date=now,
-                    end_date=None,
-                )
-                db.add(sub)
-                db.commit()
-                db.refresh(sub)
+                try:
+                    with db.begin_nested():
+                        sub = Subscription(
+                            id=uuid.uuid4(),
+                            user_id=user_id,
+                            plan_type="free",
+                            billing_cycle=None,
+                            status="active",
+                            start_date=now,
+                            end_date=None,
+                        )
+                        db.add(sub)
+                        db.flush()
+                except IntegrityError:
+                    sub = (
+                        db.query(Subscription)
+                        .filter(
+                            Subscription.user_id == user_id,
+                            Subscription.plan_type == "free",
+                        )
+                        .first()
+                    )
+                    if not sub:
+                        raise
 
         return sub
 
@@ -173,18 +185,17 @@ class SubscriptionService:
                 or 0
             )
             try:
-                record = UserMonthlyQuota(
-                    id=uuid.uuid4(),
-                    user_id=user_id,
-                    year_month=ym,
-                    guidance_sessions_used=guidance_count,
-                    doc_analyses_used=doc_count,
-                )
-                db.add(record)
-                db.commit()
-                db.refresh(record)
-            except Exception:
-                db.rollback()
+                with db.begin_nested():
+                    record = UserMonthlyQuota(
+                        id=uuid.uuid4(),
+                        user_id=user_id,
+                        year_month=ym,
+                        guidance_sessions_used=guidance_count,
+                        doc_analyses_used=doc_count,
+                    )
+                    db.add(record)
+                    db.flush()
+            except IntegrityError:
                 query = db.query(UserMonthlyQuota).filter(
                     UserMonthlyQuota.user_id == user_id,
                     UserMonthlyQuota.year_month == ym,
@@ -192,11 +203,13 @@ class SubscriptionService:
                 if for_update:
                     query = query.with_for_update()
                 record = query.first()
+                if not record:
+                    raise
         return record
 
     @classmethod
     def auto_heal_stale_processing_documents(
-        cls, db: Session, user_id: uuid.UUID, stale_seconds: int = 300
+        cls, db: Session, user_id: uuid.UUID, stale_seconds: int = 300, commit: bool = True
     ) -> int:
         """Auto-heal abandoned in-flight reservations (SEC-05, AUD-03).
         
@@ -231,7 +244,10 @@ class SubscriptionService:
                 d.manual_review_required = True
                 d.processing_token = None  # Revoke ownership token (AUD-04)
                 d.lease_expires_at = None
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
             logger.info(f"Auto-healed {len(stale_docs)} stale processing documents for user {user_id}")
         return len(stale_docs)
 
@@ -389,8 +405,8 @@ class SubscriptionService:
         # 1. Acquire row-level pessimistic lock on the user's monthly quota record
         quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=True)
 
-        # 2. Auto-heal any stale processing documents
-        cls.auto_heal_stale_processing_documents(db, user_id)
+        # 2. Auto-heal any stale processing documents without releasing row lock
+        cls.auto_heal_stale_processing_documents(db, user_id, commit=False)
 
         # 3. Determine active subscription limit
         sub = cls.get_active_subscription(db, user_id)
@@ -448,7 +464,7 @@ class SubscriptionService:
         # Synchronize ledger record
         if quota_record:
             quota_record.doc_analyses_used = completed_count
-            db.commit()
+            db.flush()
 
     @classmethod
     def finalize_document_analysis(

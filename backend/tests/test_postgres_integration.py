@@ -126,9 +126,10 @@ class TestPostgresLiveIntegration:
 
         try:
             # Create a test citizen
+            phone = f"+9199{uuid.uuid4().int % 100000000:08d}"
             test_user = User(
                 role="citizen",
-                mobile_number="+919999988888",
+                mobile_number=phone,
                 is_active=True,
             )
             db.add(test_user)
@@ -137,7 +138,7 @@ class TestPostgresLiveIntegration:
             # Create OTP challenge
             now = datetime.now(timezone.utc)
             otp_record = OTPChallenge(
-                mobile_number="+919999988888",
+                mobile_number=phone,
                 hashed_otp=hash_token("654321"),
                 purpose="auth",
                 expires_at=now + timedelta(minutes=5),
@@ -148,7 +149,7 @@ class TestPostgresLiveIntegration:
             db.add(otp_record)
 
             # Create User session with hashed refresh token
-            token_hash = hash_token("test_refresh_token_entropy_string")
+            token_hash = hash_token(f"test_refresh_token_entropy_string_{uuid.uuid4().hex}")
             session_record = UserSession(
                 user_id=test_user.id,
                 token_hash=token_hash,
@@ -175,7 +176,7 @@ class TestPostgresLiveIntegration:
             assert queried_session.user_id == test_user.id
             assert queried_session.is_revoked is False
 
-            queried_otp = db.query(OTPChallenge).filter(OTPChallenge.mobile_number == "+919999988888").first()
+            queried_otp = db.query(OTPChallenge).filter(OTPChallenge.mobile_number == phone).first()
             assert queried_otp is not None
             assert queried_otp.is_verified is False
 
@@ -221,9 +222,10 @@ class TestPostgresConcurrencyLive:
         from concurrent.futures import ThreadPoolExecutor
         from app.services.subscription_service import SubscriptionService
 
+        user_id = uuid.uuid4()
         db_init = pg_sessionmaker()
         test_user = User(
-            id=uuid.uuid4(),
+            id=user_id,
             role="citizen",
             mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
             is_active=True,
@@ -235,7 +237,8 @@ class TestPostgresConcurrencyLive:
         def init_quota(idx):
             db = pg_sessionmaker()
             try:
-                rec = SubscriptionService.get_or_create_monthly_quota_record(db, test_user.id, for_update=True)
+                rec = SubscriptionService.get_or_create_monthly_quota_record(db, user_id, for_update=True)
+                db.commit()
                 return rec is not None
             finally:
                 db.close()
@@ -250,7 +253,7 @@ class TestPostgresConcurrencyLive:
         ym = f"{now.year:04d}-{now.month:02d}"
         from app.models.subscription import UserMonthlyQuota
         records = db_check.query(UserMonthlyQuota).filter(
-            UserMonthlyQuota.user_id == test_user.id,
+            UserMonthlyQuota.user_id == user_id,
             UserMonthlyQuota.year_month == ym,
         ).all()
         assert len(records) == 1
@@ -262,9 +265,10 @@ class TestPostgresConcurrencyLive:
         from app.services.subscription_service import SubscriptionService
         from app.models.document import DocumentMetadata, DocumentProcessingStatus
 
+        user_id = uuid.uuid4()
         db_init = pg_sessionmaker()
         test_user = User(
-            id=uuid.uuid4(),
+            id=user_id,
             role="citizen",
             mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
             is_active=True,
@@ -276,10 +280,10 @@ class TestPostgresConcurrencyLive:
         for i in range(2):
             doc = DocumentMetadata(
                 id=uuid.uuid4(),
-                user_id=test_user.id,
+                user_id=user_id,
                 document_type="income_certificate",
                 original_filename=f"doc_{i}.pdf",
-                storage_reference=f"/vault/{test_user.id}/doc_{i}.pdf",
+                storage_reference=f"/vault/{user_id}/doc_{i}.pdf",
                 mime_type="application/pdf",
                 file_size=1024,
                 ocr_status=DocumentProcessingStatus.OCR_COMPLETED,
@@ -291,14 +295,14 @@ class TestPostgresConcurrencyLive:
         def try_reserve(idx):
             db = pg_sessionmaker()
             try:
-                SubscriptionService.reserve_document_analysis_quota(db, test_user.id)
+                SubscriptionService.reserve_document_analysis_quota(db, user_id)
                 # Create in-flight doc
                 doc_in_flight = DocumentMetadata(
                     id=uuid.uuid4(),
-                    user_id=test_user.id,
+                    user_id=user_id,
                     document_type="income_certificate",
                     original_filename=f"concurrent_{idx}.pdf",
-                    storage_reference=f"/vault/{test_user.id}/concurrent_{idx}.pdf",
+                    storage_reference=f"/vault/{user_id}/concurrent_{idx}.pdf",
                     mime_type="application/pdf",
                     file_size=1024,
                     ocr_status=DocumentProcessingStatus.PROCESSING,
@@ -322,4 +326,275 @@ class TestPostgresConcurrencyLive:
         blocked_count = outcomes.count("BLOCKED_QUOTA")
         assert success_count == 1
         assert blocked_count == 4
+
+    def test_concurrent_document_retry_requests(self, pg_sessionmaker):
+        """AUD-06: 5 concurrent retry attempts invoking actual DocumentService.retry_ocr().
+
+        Row-lock serialization in DocumentService.retry_ocr guarantees exactly 1
+        transitions to PROCESSING under exclusive lease ownership, while all
+        concurrent competitors receive 409 Conflict.
+        """
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from unittest.mock import patch
+        from fastapi import HTTPException
+        from sqlalchemy import func
+        from app.models.document import DocumentMetadata, DocumentProcessingStatus
+        from app.services.document_service import DocumentService
+        from app.services.subscription_service import SubscriptionService
+        from app.services.ocr_service import OCRResult
+
+        user_id = uuid.uuid4()
+        doc_id = uuid.uuid4()
+        db_init = pg_sessionmaker()
+
+        test_user = User(
+            id=user_id,
+            role="citizen",
+            mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+            is_active=True,
+        )
+        db_init.add(test_user)
+
+        failed_doc = DocumentMetadata(
+            id=doc_id,
+            user_id=user_id,
+            document_type="income_certificate",
+            original_filename="failed_doc.pdf",
+            storage_reference=f"/vault/{user_id}/failed_doc.pdf",
+            mime_type="application/pdf",
+            file_size=1024,
+            ocr_status=DocumentProcessingStatus.OCR_FAILED,
+        )
+        db_init.add(failed_doc)
+        db_init.commit()
+        db_init.close()
+
+        winner_in_ocr = threading.Event()
+        allow_ocr_to_finish = threading.Event()
+
+        def fake_get_file_bytes(storage_ref):
+            return b"%PDF-1.4 test binary content"
+
+        def fake_process_document(*args, **kwargs):
+            # Signal that the winning worker has acquired lease, committed PROCESSING, and started OCR
+            winner_in_ocr.set()
+            # Deterministically hold lease until competitors have raced and been rejected with 409
+            allow_ocr_to_finish.wait(timeout=10.0)
+            return OCRResult(
+                extracted_text="Income: 100000",
+                confidence=0.95,
+                metadata={"engine": "mock_ocr"},
+                status=DocumentProcessingStatus.OCR_COMPLETED,
+                manual_review_required=False,
+            )
+
+        def attempt_retry(idx):
+            db = pg_sessionmaker()
+            try:
+                user = db.query(User).filter(User.id == user_id).first()
+                DocumentService.retry_ocr(
+                    db=db,
+                    document_id=doc_id,
+                    user=user,
+                )
+                return "ACQUIRED"
+            except HTTPException as http_exc:
+                if http_exc.status_code == 409:
+                    return "CONFLICT_409"
+                return f"HTTP_{http_exc.status_code}"
+            except Exception as exc:
+                return f"ERROR_{exc}"
+            finally:
+                db.close()
+
+        with patch("app.services.document_service.storage_service.get_file_bytes", side_effect=fake_get_file_bytes), \
+             patch("app.services.document_service.ocr_service.process_document", side_effect=fake_process_document):
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # Launch all 5 concurrent retry attempts simultaneously
+                futures = [executor.submit(attempt_retry, i) for i in range(5)]
+
+                # Deterministically wait for winner to acquire lease and enter OCR
+                assert winner_in_ocr.wait(timeout=5.0), "Winning thread failed to acquire lease"
+
+                # Check PostgreSQL database while lease is actively held
+                db_verify = pg_sessionmaker()
+                in_flight_doc = db_verify.query(DocumentMetadata).filter(DocumentMetadata.id == doc_id).first()
+                assert in_flight_doc.ocr_status == DocumentProcessingStatus.PROCESSING
+                assert in_flight_doc.processing_token is not None
+                assert in_flight_doc.lease_expires_at is not None
+                assert in_flight_doc.lease_expires_at > datetime.now(timezone.utc)
+
+                # Verify quota: exactly 1 in-flight reservation exists
+                now = datetime.now(timezone.utc)
+                month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+                in_flight_count = (
+                    db_verify.query(func.count(DocumentMetadata.id))
+                    .filter(
+                        DocumentMetadata.user_id == user_id,
+                        DocumentMetadata.ocr_status == DocumentProcessingStatus.PROCESSING,
+                        DocumentMetadata.created_at >= month_start,
+                    )
+                    .scalar()
+                )
+                assert in_flight_count == 1
+                db_verify.close()
+
+                # Collect the 4 competing futures while winner remains blocked
+                competitor_outcomes = []
+                remaining_futures = set(futures)
+                for f in as_completed(remaining_futures):
+                    competitor_outcomes.append(f.result(timeout=10.0))
+                    remaining_futures.remove(f)
+                    if len(competitor_outcomes) == 4:
+                        break
+
+                # Step 3: Verify all four completed results are CONFLICT_409 while winner remains blocked
+                assert len(competitor_outcomes) == 4
+                assert competitor_outcomes == ["CONFLICT_409", "CONFLICT_409", "CONFLICT_409", "CONFLICT_409"]
+
+                # Step 4: Only after these four conflicts are verified, release winner to complete OCR
+                allow_ocr_to_finish.set()
+
+                # Step 5: Collect the winner's result and verify it is ACQUIRED
+                assert len(remaining_futures) == 1
+                winning_future = remaining_futures.pop()
+                winner_result = winning_future.result(timeout=10.0)
+                assert winner_result == "ACQUIRED"
+
+        # Final DB check: document successfully finalized to OCR_COMPLETED
+        db_final = pg_sessionmaker()
+        final_doc = db_final.query(DocumentMetadata).filter(DocumentMetadata.id == doc_id).first()
+        assert final_doc.ocr_status == DocumentProcessingStatus.OCR_COMPLETED
+        assert final_doc.processing_token is None  # Token released upon successful finalization (AUD-04)
+        assert final_doc.lease_expires_at is None
+        assert final_doc.ocr_extracted_text == "Income: 100000"
+
+        # Quota successfully finalized to 1 completed analysis
+        quota_final = SubscriptionService.get_quota_status(db_final, user_id)
+        assert quota_final.ai_document_analyses_used == 1
+        db_final.close()
+
+    def test_live_postgres_lease_renewal_vs_stale_recovery(self, pg_sessionmaker):
+        """AUD-03: Active worker with renewed lease is preserved on live PostgreSQL;
+        crashed worker with expired lease is auto-healed to OCR_FAILED.
+        """
+        from app.models.document import DocumentMetadata, DocumentProcessingStatus
+        from app.services.subscription_service import SubscriptionService
+
+        user_id = uuid.uuid4()
+        active_doc_id = uuid.uuid4()
+        stale_doc_id = uuid.uuid4()
+        active_token = uuid.uuid4()
+        stale_token = uuid.uuid4()
+
+        db = pg_sessionmaker()
+        test_user = User(
+            id=user_id,
+            role="citizen",
+            mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+            is_active=True,
+        )
+        db.add(test_user)
+
+        now = datetime.now(timezone.utc)
+        # Active document: started 6 minutes ago, but heartbeat renewed lease to now + 4 mins
+        active_doc = DocumentMetadata(
+            id=active_doc_id,
+            user_id=user_id,
+            document_type="income_certificate",
+            original_filename="active.pdf",
+            storage_reference=f"/vault/{user_id}/active.pdf",
+            mime_type="application/pdf",
+            file_size=2048,
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            processing_token=active_token,
+            created_at=now - timedelta(minutes=6),
+            lease_expires_at=now + timedelta(minutes=4),
+        )
+        # Stale document: started 10 minutes ago, lease expired 5 minutes ago
+        stale_doc = DocumentMetadata(
+            id=stale_doc_id,
+            user_id=user_id,
+            document_type="income_certificate",
+            original_filename="stale.pdf",
+            storage_reference=f"/vault/{user_id}/stale.pdf",
+            mime_type="application/pdf",
+            file_size=2048,
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            processing_token=stale_token,
+            created_at=now - timedelta(minutes=10),
+            lease_expires_at=now - timedelta(minutes=5),
+        )
+        db.add_all([active_doc, stale_doc])
+        db.commit()
+
+        # Run auto-heal
+        healed_count = SubscriptionService.auto_heal_stale_processing_documents(db, user_id)
+        assert healed_count == 1  # Only stale doc healed!
+
+        # Verify active doc remains in PROCESSING with its token intact
+        db.refresh(active_doc)
+        assert active_doc.ocr_status == DocumentProcessingStatus.PROCESSING
+        assert active_doc.processing_token == active_token
+
+        # Verify stale doc is marked OCR_FAILED and token revoked
+        db.refresh(stale_doc)
+        assert stale_doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
+        assert stale_doc.processing_token is None
+        assert stale_doc.lease_expires_at is None
+        db.close()
+
+    def test_live_postgres_old_worker_finalization_after_token_invalidation(self, pg_sessionmaker):
+        """AUD-04: Late worker finishing after token invalidation is rejected and cannot consume quota."""
+        from app.models.document import DocumentMetadata, DocumentProcessingStatus
+        from app.services.subscription_service import SubscriptionService
+
+        user_id = uuid.uuid4()
+        doc_id = uuid.uuid4()
+        old_token = uuid.uuid4()
+
+        db = pg_sessionmaker()
+        test_user = User(
+            id=user_id,
+            role="citizen",
+            mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+            is_active=True,
+        )
+        db.add(test_user)
+
+        # Create document that was auto-healed after crash (status OCR_FAILED, token cleared)
+        doc = DocumentMetadata(
+            id=doc_id,
+            user_id=user_id,
+            document_type="income_certificate",
+            original_filename="crashed.pdf",
+            storage_reference=f"/vault/{user_id}/crashed.pdf",
+            mime_type="application/pdf",
+            file_size=2048,
+            ocr_status=DocumentProcessingStatus.OCR_FAILED,
+            processing_token=None,  # Token was revoked
+            lease_expires_at=None,
+        )
+        db.add(doc)
+        db.commit()
+
+        # Zombie worker awakes and tries to finalize with old_token
+        finalized = SubscriptionService.finalize_document_analysis(
+            db=db,
+            user_id=user_id,
+            doc_id=doc_id,
+            processing_token=old_token,
+        )
+        assert finalized is False
+
+        # Quota remains 0
+        quota = SubscriptionService.get_quota_status(db, user_id)
+        assert quota.ai_document_analyses_used == 0
+
+        # Document record remains unchanged
+        db.refresh(doc)
+        assert doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
+        db.close()
 

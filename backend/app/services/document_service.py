@@ -349,6 +349,13 @@ class DocumentService:
                 detail="OCR extraction is already currently processing for this document.",
             )
 
+        # Ensure strictly only OCR_FAILED documents are retryable
+        if doc.ocr_status != DocumentProcessingStatus.OCR_FAILED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Document with status '{doc.ocr_status}' is not eligible for OCR retry.",
+            )
+
         # 4. Reserve quota slot before processing (only eligible failed documents reach here)
         SubscriptionService.reserve_document_analysis_quota(db=db, user_id=user.id)
 
