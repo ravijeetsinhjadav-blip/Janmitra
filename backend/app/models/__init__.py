@@ -10,6 +10,7 @@ from app.models.notification import Notification
 from app.models.otp import OTPChallenge
 from app.models.session import UserSession
 from app.models.account_deletion import AccountDeletionRequest
+from app.models.scheme_knowledge import SchemeKnowledgeChunk
 
 __all__ = [
     "Base",
@@ -27,4 +28,5 @@ __all__ = [
     "OTPChallenge",
     "UserSession",
     "AccountDeletionRequest",
+    "SchemeKnowledgeChunk",
 ]

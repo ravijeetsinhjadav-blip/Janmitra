@@ -54,6 +54,24 @@ class Assessment(Base):
         nullable=True,
         comment="Readiness score ranging from 0.0 to 100.0 (nullable)",
     )
+    advisory_guidance = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Structured AI explanation, next steps, and citations (Phase 6)",
+    )
+    readiness_breakdown = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Component readiness scores: criteria match, document coverage, completeness, consistency (Phase 6)",
+    )
+    language = Column(
+        String(10),
+        nullable=False,
+        default="en",
+        comment="Advisory language code: en, hi, gu (Phase 6)",
+    )
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

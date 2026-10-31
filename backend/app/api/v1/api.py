@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, schemes, users, documents
+from app.api.v1.endpoints import auth, schemes, users, documents, advisory
 
 api_router = APIRouter()
 
@@ -14,5 +14,9 @@ api_router.include_router(schemes.router, prefix="/schemes", tags=["Schemes & El
 
 # Document Vault & OCR Pipeline (Phase 5)
 api_router.include_router(documents.router, prefix="/documents", tags=["Document Vault & OCR"])
+
+# AI Advisory & Readiness Assessment Engine (Phase 6)
+api_router.include_router(advisory.router, tags=["AI Advisory & Readiness"])
+
 
 

@@ -2,7 +2,7 @@
 
 **Project Name:** JanMitra Assist – AI-Powered Government Service Eligibility and Document Intelligence System  
 **Academic Target:** MCA Major Project  
-**Current Phase:** Phase 5 (Document Vault & OCR Pipeline) – COMPLETED & AUDITED
+**Current Phase:** Phase 6 (AI Advisory & Readiness Assessment Engine) – COMPLETED & AUDITED
 
 
 ---
@@ -136,7 +136,7 @@
 - [x] **Phase 3:** Authentication & User Management
 - [x] **Phase 4:** Government Scheme Discovery & Eligibility Engine
 - [x] **Phase 5:** Document Vault & OCR Pipeline
-- [ ] **Phase 6:** AI Advisory & Readiness Assessment Engine (PENDING USER INITIATION)
+- [x] **Phase 6:** AI Advisory & Readiness Assessment Engine
 - [ ] **Phase 7:** Assisted Service, Subscription & Payment Integration (PENDING USER INITIATION)
 - [ ] **Phase 8:** Final Polish, Security Audit & Academic Packaging (PENDING USER INITIATION)
 
@@ -239,4 +239,68 @@
 - **Flutter Analyze:** 0 issues found.
 - **Alembic Static SQL:** Verified PostgreSQL DDL upgrade/downgrade.
 
+---
+
+## 5. Phase 6 Implementation & Verification (AI Advisory & Readiness Assessment Engine)
+
+### Task A: Database Model Extension & Alembic Migration
+- **Model `SchemeKnowledgeChunk` (`backend/app/models/scheme_knowledge.py`):**
+  - Stores structured, chunked clauses from official government scheme guidelines (`chunk_title`, `chunk_category`, `chunk_content`, `source_url`, `source_title`, `source_reference`, `source_freshness_status`, `is_demo_data`, `embedding`).
+- **Extended `Assessment` (`backend/app/models/assessment.py`):**
+  - `advisory_guidance`: JSONB storing structured AI-generated synthesis, condition notes, and source citations.
+  - `readiness_breakdown`: JSONB storing multi-dimensional component scores and document discrepancy checks.
+  - `language`: VARCHAR(10) storing citizen language preference (`en`, `hi`, `gu`).
+- **Alembic Migration `f1a2b3c4d5e6`:** Verified static DDL upgrade and downgrade for PostgreSQL.
+
+### Task B: RAG Government Scheme Knowledge Retrieval
+- **Service `RAGService` (`backend/app/services/rag_service.py`):**
+  - Seeded verified official knowledge excerpts across all 5 demo schemes (PM-KISAN, AB-PMJAY, PMAY-G, NSP Scholarship, Maharashtra MJPJAY).
+  - Preserves source citations, guideline references, and freshness states (`Verified Official Source`, `Pending Verification`, `Review Required`, `Stale`).
+  - Token-overlap ranking selects top-k most relevant clauses without introducing unapproved vector databases.
+  - Factual grounding constraint: AI guidance relies exclusively on retrieved chunks and structured criteria; no hallucination of income/age limits or application URLs.
+
+### Task C: Cloud LLM Provider Adapter & Production Safety
+- **Adapter Hierarchy (`backend/app/services/llm_service.py`):**
+  - `BaseLLMAdapter`: Abstract interface with `generate_advisory(...)`.
+  - `GeminiLLMAdapter`: Production cloud adapter connecting to Google Gemini REST API via `httpx` with configurable timeout and retries.
+  - `MockLLMAdapter`: Deterministic mock adapter for development/testing with zero external token costs, outputting authentic civic guidance in English, Hindi, and Gujarati.
+- **Production Safety Isolation:** In production (`ENVIRONMENT == 'production'` or `DEBUG is False`), `MockLLMAdapter` cannot execute. Missing cloud credentials raise explicit errors rather than falling back silently.
+
+### Task D: Deterministic Engine Supremacy & AI Safety
+- **Strict Separation:** The deterministic eligibility engine (Phase 4) remains the sole source of eligibility classifications (`Potentially Eligible`, `Not Eligible Based on Available Information`, `Insufficient Information`). The LLM **never overrides** this decision.
+- **Prompt Injection Defense:** Untrusted citizen OCR text and retrieved external data are encapsulated inside XML delimiters (`<citizen_ocr_data>`, `<retrieved_scheme_knowledge>`) with explicit system instructions prohibiting instruction-following within those tags.
+- **PII Minimization:** Masking strips 12-digit Aadhaar numbers (`XXXX-XXXX-1234`) and Indian mobile numbers (`XXXXXXX210`) before prompt transmission. Full OCR text is excluded from logs.
+
+### Task E: Multi-Dimensional Application Readiness Engine
+- **Service `ReadinessService` (`backend/app/services/readiness_service.py`):**
+  - Computes 4 transparent component scores (0–100%):
+    1. `criteria_match_percentage`: From Phase 4 deterministic engine.
+    2. `document_coverage_percentage`: Uploaded vs required document types.
+    3. `information_completeness_percentage`: Profile completeness against scheme fields.
+    4. `consistency_score`: Name and DOB cross-validation between profile and OCR extraction.
+  - Calculates composite weighted Readiness Score:
+    $$\text{Readiness Score} = 0.40 \times \text{Criteria Match} + 0.30 \times \text{Doc Coverage} + 0.15 \times \text{Completeness} + 0.15 \times \text{Consistency}$$
+  - Classifies consistency status (`Consistent`, `Discrepancy Detected`, `Review Required`).
+  - Statutory non-guarantee advisory disclaimers displayed on all outputs.
+
+### Task F: Flutter Citizen Client Integration
+- **Models & Service:** `AdvisoryAssessmentModel`, `ReadinessBreakdownModel`, and `AdvisoryService` in `features/readiness`.
+- **`AIAdvisoryScreen`:**
+  - Multilingual language toggle chips (`EN`, `हिंदी`, `ગુજરાતી`) with live re-generation.
+  - Circular readiness gauge and 4-bar progress indicator.
+  - Discrepancy warning banner with specific field mismatch alerts.
+  - Uploaded vs Missing document type chips with one-click navigation to Document Vault.
+  - Step-by-step actionable preparation checklist.
+  - Official government portal guidance and clipboard copy button.
+  - Verified source references with freshness badges.
+- **Cross-Screen Integration:** Added "View AI Advisory & Readiness Report" button to `EligibilityResultScreen` and activated the Phase 6 feature card on `HomeScreen`.
+
+### Task G: Testing & Quality Metrics
+- **Backend Pytest Suite:** **93 passed, 1 skipped (live PostgreSQL test), 0 failed** across 94 tests (including 11 dedicated Phase 6 AI advisory, RAG, prompt injection, and readiness tests).
+- **Flutter Test Suite:** **18 passed, 0 failed** across `advisory_widgets_test.dart` (4 tests), `document_widgets_test.dart` (7 tests), `scheme_widgets_test.dart` (5 tests), and `widget_test.dart` (2 tests).
+- **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+
+---
+
+- [ ] **Phase 7:** Assisted Service, Subscription & Payment Integration (PENDING USER INITIATION)
 - [ ] **Phase 8:** Final Hardening, Integration & Academic Defense Preparation (PENDING USER INITIATION)

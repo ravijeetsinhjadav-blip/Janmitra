@@ -482,7 +482,44 @@ Includes 5 seed schemes with authentic nodal links, verified supporting document
 
 ---
 
-## 12. Common Troubleshooting
+## 12. Phase 6: AI Advisory & Readiness Assessment Engine
+
+### 12.1 Separation of Deterministic Assessment from LLM Reasoning
+- **Deterministic Rule Engine (Phase 4):** Evaluates profile demographic facts against statutory conditions and produces the authoritative outcome (`Potentially Eligible`, `Not Eligible Based on Available Information`, `Insufficient Information`) and `Criteria Match Percentage`. The LLM **never overrides** this determination.
+- **AI Advisory Engine (Phase 6):** Explains the assessment outcome in citizen-friendly language, explains matched vs unmatched conditions, identifies missing profile and document items, highlights potential name/DOB discrepancies, and outlines actionable preparation steps based on retrieved official guidelines.
+
+### 12.2 RAG Knowledge Retrieval Pipeline
+- **Ingestion & Seeding:** Official scheme clauses ingested into `scheme_knowledge_chunks` with metadata (`source_url`, `source_reference`, `source_freshness_status`, `is_demo_data`).
+- **Retrieval:** Token-overlap keyword and category ranking retrieves the top-3 most relevant clauses for the evaluated scheme.
+- **Factual Grounding:** All claims cite verified nodal sources; prevents hallucination of benefits, income ceilings, age limits, or URLs.
+
+### 12.3 Cloud LLM Provider Adapter & Production Safety
+- **Modular Adapter Architecture:** Supports Google Gemini (`GeminiLLMAdapter` via `httpx`) and high-fidelity local simulation (`MockLLMAdapter`).
+- **Strict Production Safety:** In production (`ENVIRONMENT == 'production'` or `DEBUG is False`), `MockLLMAdapter` cannot run. Missing API keys or cloud failures return explicit error states rather than silent fallback.
+- **Multilingual Support:** Delivers tailored guidance in **English (`en`)**, **Hindi (`hi`)**, and **Gujarati (`gu`)** while preserving official scheme names and document nomenclature.
+
+### 12.4 AI Safety, Prompt Injection Defense & Privacy
+- **Prompt Injection Neutralization:** Untrusted inputs (OCR text, retrieved content) are strictly isolated inside XML-like tags (`<citizen_ocr_data>`, `<retrieved_scheme_knowledge>`) with explicit system rules instructing the LLM to treat them as passive data.
+- **PII Minimization:** Aadhaar numbers are automatically masked (`XXXX-XXXX-1234`) and phone numbers masked (`XXXXXXX210`) before sending prompts.
+- **Log Sanitation:** Extracted OCR text and prompt text are completely excluded from application log streams.
+
+### 12.5 Multi-Dimensional Application Readiness Scoring
+- **Composite Readiness Score Formula:**
+  $$\text{Readiness Score} = 0.40 \times \text{Criteria Match} + 0.30 \times \text{Doc Coverage} + 0.15 \times \text{Completeness} + 0.15 \times \text{Consistency}$$
+- **Document Consistency Cross-Validation:** Cross-checks citizen profile name and birth year against OCR text extracted from identity documents in the vault, flagging `Consistent`, `Discrepancy Detected`, or `Review Required`.
+- **Statutory Non-Guarantee Disclaimer:** Prominently states that readiness scores and AI guidance are advisory evaluations, not government approval probabilities.
+
+### 12.6 Phase 6 API Endpoint Reference
+
+| Method | Endpoint | Auth Required | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/v1/advisory/schemes/{id}/assess-and-advise` | Bearer JWT | Run deterministic check, readiness scoring, and AI advisory synthesis (`en`, `hi`, `gu`) |
+| `GET` | `/api/v1/advisory/assessments/{id}` | Bearer JWT | Retrieve past AI advisory and readiness report with citizen ownership validation |
+| `POST` | `/api/v1/advisory/assessments/{id}/regenerate` | Bearer JWT | Re-generate advisory guidance in a different language or refresh with vault docs |
+
+---
+
+## 13. Common Troubleshooting
 
 
 ### 1. `OperationalError: connection to server at "localhost", port 5432 failed`

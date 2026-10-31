@@ -35,7 +35,13 @@ class ApiEndpoints {
   static String documentRetryOcr(String id) => '/api/v1/documents/$id/retry-ocr';
   static String schemeDocumentChecklist(String schemeId) => '/api/v1/documents/scheme/$schemeId/checklist';
 
-  // Future phase endpoints (Phases 6-8)
+  // Phase 6 AI Advisory & Readiness Assessment Engine
+  static const String advisory = '/api/v1/advisory';
+  static String schemeAssessAndAdvise(String schemeId) => '/api/v1/advisory/schemes/$schemeId/assess-and-advise';
+  static String assessmentAdvisory(String assessmentId) => '/api/v1/advisory/assessments/$assessmentId';
+  static String assessmentRegenerate(String assessmentId) => '/api/v1/advisory/assessments/$assessmentId/regenerate';
+
+  // Future phase endpoints (Phases 7-8)
   static const String readiness = '/api/v1/readiness';
 
 }

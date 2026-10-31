@@ -24,5 +24,10 @@ def setup_logging() -> logging.Logger:
     return logger
 
 
+def get_logger(name: str = "janmitra") -> logging.Logger:
+    """Return a named logger configured with application log settings."""
+    return logging.getLogger(name)
+
+
 logger = setup_logging()
 

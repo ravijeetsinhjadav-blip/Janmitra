@@ -167,6 +167,7 @@ class Scheme(Base):
     # Relationships
     assessments = relationship("Assessment", back_populates="scheme")
     applications = relationship("Application", back_populates="scheme")
+    knowledge_chunks = relationship("SchemeKnowledgeChunk", back_populates="scheme", cascade="all, delete-orphan")
 
     def __init__(self, **kwargs):
         kwargs.setdefault("source_freshness_status", "Pending Verification")

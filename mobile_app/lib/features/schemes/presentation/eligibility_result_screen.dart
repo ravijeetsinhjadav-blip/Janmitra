@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../profile/presentation/screens/profile_setup_screen.dart';
+import '../../readiness/presentation/screens/ai_advisory_screen.dart';
 import '../models/scheme_models.dart';
 
 class EligibilityResultScreen extends StatelessWidget {
@@ -182,6 +183,69 @@ class EligibilityResultScreen extends StatelessWidget {
                         _buildCountBadge('Not Satisfied', assessment.notSatisfiedCount, Colors.red.shade700),
                         _buildCountBadge('Unknown', assessment.unknownCount, Colors.orange.shade800),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Phase 6 AI Advisory & Readiness Access Card
+            Card(
+              elevation: 2,
+              color: Colors.blue.shade50.withValues(alpha: 0.6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.4)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.psychology, color: AppTheme.primaryBlue, size: 24),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'AI Advisory & Readiness Report',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryBlue,
+                                ),
+                              ),
+                              Text(
+                                'Get personalized guidance, document cross-checks, and multilingual next steps.',
+                                style: TextStyle(fontSize: 12, color: Colors.black54),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('View AI Advisory & Readiness Report'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => AIAdvisoryScreen(
+                              schemeId: assessment.schemeId,
+                              assessmentId: assessment.assessmentId,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

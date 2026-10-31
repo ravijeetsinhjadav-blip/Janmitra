@@ -56,6 +56,18 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     OCR_CONFIDENCE_THRESHOLD: float = 0.70
 
+    # AI Advisory & LLM Provider Settings (Phase 6)
+    AI_PROVIDER: str = "gemini"  # Options: 'gemini', 'openai_compatible', 'mock'
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    AI_REQUEST_TIMEOUT_SECONDS: int = 30
+    AI_MAX_RETRIES: int = 2
+    RAG_TOP_K: int = 3
+    DEFAULT_ADVISORY_LANGUAGE: str = "en"  # Supported: 'en', 'hi', 'gu'
+
     @property
     def allowed_extensions(self) -> List[str]:
         return [ext.strip().lower().lstrip(".") for ext in self.ALLOWED_DOCUMENT_EXTENSIONS.split(",") if ext.strip()]
