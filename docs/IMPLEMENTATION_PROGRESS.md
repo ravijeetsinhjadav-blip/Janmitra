@@ -295,10 +295,30 @@
   - Verified source references with freshness badges.
 - **Cross-Screen Integration:** Added "View AI Advisory & Readiness Report" button to `EligibilityResultScreen` and activated the Phase 6 feature card on `HomeScreen`.
 
-### Task G: Testing & Quality Metrics
-- **Backend Pytest Suite:** **93 passed, 1 skipped (live PostgreSQL test), 0 failed** across 94 tests (including 11 dedicated Phase 6 AI advisory, RAG, prompt injection, and readiness tests).
-- **Flutter Test Suite:** **18 passed, 0 failed** across `advisory_widgets_test.dart` (4 tests), `document_widgets_test.dart` (7 tests), `scheme_widgets_test.dart` (5 tests), and `widget_test.dart` (2 tests).
-- **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+### Task G: Phase 6 Independent Final Audit & Security Hardening
+- **Readiness Reliability Corrections (`readiness_service.py`):**
+  - Excluded `OCR_FAILED` documents from coverage (0% credit, flagged as failed in missing documents list).
+  - Granted partial credit (0.5 / 50%) for `MANUAL_REVIEW_REQUIRED` and low-confidence scans (<0.70).
+  - Proportional consistency score instead of arbitrary 75%/50% (deductions of -20% per discrepancy and -10% per review item).
+  - When citizen has uploaded 0 documents, set status to `"Not Evaluated (No Documents)"` and consistency score to `0.0`.
+  - Eligibility status capping: Capped overall readiness at max 35.0% if status is `Not Eligible Based on Available Information`, and at max 50.0% if `Insufficient Information`.
+- **RAG Source Authenticity (`rag_service.py`, `advisory_service.py`):**
+  - Handled freshness states (`Pending Verification`, `Stale`, `Review Required`) with explicit `[WARNING: ...]` tags in citations and prompt guidance.
+  - Tagged all demo chunks with `is_demo_data=True`. Handled empty chunks state with explicit anti-hallucination prompt guidance.
+- **Prompt Injection & Output Validation (`llm_service.py`):**
+  - Stripped XML breakout boundary tags (`</citizen_ocr_data>`, `</retrieved_scheme_knowledge>`, `</system>`, backticks) via `sanitize_untrusted_prompt_text`.
+  - Enforced strict output validation against Pydantic schema `AdvisoryLLMOutputSchema` for Gemini responses.
+- **PII Minimization (`llm_service.py`):**
+  - Excluded raw citizen names and exact dates of birth from LLM payloads via `sanitize_conditions_breakdown_for_llm` (`[MASKED_CITIZEN_NAME]`, `[MASKED_DOB]`, `[MASKED_PHONE]`).
+  - Minimized discrepancy strings via `sanitize_discrepancies_for_llm`. Full raw OCR text is excluded from prompt payloads.
+- **Flutter UI Enhancements (`ai_advisory_screen.dart`):**
+  - Dynamic status styling for `Not Evaluated (No Documents)`, `Discrepancy Detected`, `Review Required`, and `Consistent`.
+  - Freshness badge color cues for official citations.
+- **Testing & Quality Metrics:**
+  - **Backend Pytest Suite:** **99 passed, 1 skipped (live PostgreSQL), 0 failed** across 100 tests (including 17 dedicated Phase 6 advisory, RAG, readiness, prompt injection, and PII tests).
+  - **Flutter Test Suite:** **18 passed, 0 failed** across `advisory_widgets_test.dart`, `document_widgets_test.dart`, `scheme_widgets_test.dart`, and `widget_test.dart`.
+  - **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+  - **Alembic Static SQL:** Verified clean generation through migration `f1a2b3c4d5e6`.
 
 ---
 
