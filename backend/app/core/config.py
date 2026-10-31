@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     # User Account Deletion & Retention Settings (Phase 3)
     ACCOUNT_DELETION_RETENTION_DAYS: int = 30  # Configurable grace/statutory retention period
 
+    # Document Storage Settings (Phase 5)
+    DOCUMENT_STORAGE_PATH: str = "storage/documents"
+    MAX_DOCUMENT_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+    ALLOWED_DOCUMENT_EXTENSIONS: str = "pdf,jpg,jpeg,png"
+
+    # OCR Pipeline Settings (Phase 5)
+    OCR_PROVIDER: str = "google_cloud_vision"  # 'google_cloud_vision' or 'mock'
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
+    OCR_CONFIDENCE_THRESHOLD: float = 0.70
+
+    @property
+    def allowed_extensions(self) -> List[str]:
+        return [ext.strip().lower().lstrip(".") for ext in self.ALLOWED_DOCUMENT_EXTENSIONS.split(",") if ext.strip()]
+
     @property
     def cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]

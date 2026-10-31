@@ -2,7 +2,8 @@
 
 **Project Name:** JanMitra Assist – AI-Powered Government Service Eligibility and Document Intelligence System  
 **Academic Target:** MCA Major Project  
-**Current Phase:** Phase 4 (Government Scheme Discovery & Eligibility Engine) – COMPLETED & AUDITED
+**Current Phase:** Phase 5 (Document Vault & OCR Pipeline) – COMPLETED & AUDITED
+
 
 ---
 
@@ -134,7 +135,61 @@
 - [x] **Phase 2:** Database & Backend Foundation
 - [x] **Phase 3:** Authentication & User Management
 - [x] **Phase 4:** Government Scheme Discovery & Eligibility Engine
-- [ ] **Phase 5:** Document Vault & OCR Pipeline (PENDING USER INITIATION)
+- [x] **Phase 5:** Document Vault & OCR Pipeline
 - [ ] **Phase 6:** AI Advisory & Readiness Assessment Engine (PENDING USER INITIATION)
 - [ ] **Phase 7:** Assisted Service, Subscription & Payment Integration (PENDING USER INITIATION)
+- [ ] **Phase 8:** Final Polish, Security Audit & Academic Packaging (PENDING USER INITIATION)
+
+---
+
+## 3. Phase 5 Implementation & Verification (Document Vault & OCR Pipeline)
+
+### Task A: Privacy-Centric Document Storage & Security Architecture
+- **Binary Segregation:** Document binaries are stored exclusively on secure local filesystem storage (`storage/documents/<user_id>/<doc_uuid>.<ext>`) and **NEVER in PostgreSQL**.
+- **Opaque Storage References:** Opaque UUID keys prevent filename leaks, user enumeration, and direct file probing.
+- **Path Traversal Protection:** Base storage directories are strictly resolved, and any attempt to navigate parent directories (`..`) is rejected with 403 Forbidden.
+- **Magic Byte Verification:** File signatures are strictly validated for accepted formats before persistence:
+  - PDF: `%PDF` (`\x25\x50\x44\x46`)
+  - JPEG: `\xff\xd8\xff`
+  - PNG: `\x89PNG\r\n\x1a\n`
+  - Prevents extension spoofing (e.g. executable renamed as `.pdf`).
+- **File Size & Extension Controls:** Enforces maximum limit of 10 MB and limits uploads to `pdf, jpg, jpeg, png`.
+- **IDOR Protection:** Every document API endpoint enforces authenticated citizen ownership checks via JWT `sub` claims, preventing Insecure Direct Object References.
+
+### Task B: Database Schema & Alembic Migration
+- **Model Extension:** Extended `DocumentMetadata` (`backend/app/models/document.py`) with Phase 5 fields:
+  - `ocr_status`: Column(String(50), default="UPLOADED", nullable=False, index=True)
+  - `ocr_extracted_text`: Column(Text, nullable=True)
+  - `ocr_confidence`: Column(Float, nullable=True)
+  - `ocr_metadata`: Column(JSONB, nullable=False, default=dict)
+  - `ocr_completed_at`: Column(DateTime(timezone=True), nullable=True)
+  - `manual_review_required`: Column(Boolean, default=False, nullable=False, index=True)
+  - `ocr_error_message`: Column(String(500), nullable=True)
+- **Alembic Migration:** Authored `e9f8a7b6c5d4_extend_document_metadata_for_phase_5.py`.
+- **Static DDL Verification:** Verified `alembic upgrade head --sql` and `alembic downgrade e9f8a7b6c5d4:7a8e5f3c9102 --sql` under `PostgresqlImpl`.
+
+### Task C: Google Cloud Vision OCR Pipeline & Mock Fallback Adapter
+- **Adapter Pattern:** Implemented `BaseOCRAdapter`, `GoogleCloudVisionAdapter`, and `MockOCRAdapter` in `backend/app/services/ocr_service.py`.
+- **Production Adapter:** Connects to Google Cloud Vision API using `vision.ImageAnnotatorClient` for document text detection when credentials are provided.
+- **Development/Test Adapter:** Deterministic, high-fidelity mock adapter generating authentic Indian government certificate text (Income Certificate, Caste Certificate, Domicile, NFSA Ration Card, Aadhaar Card, Land Records).
+- **Edge-Case & Review Trigger:**
+  - Automated threshold enforcement: confidence score < 0.70 or unreadable/blurred scan sets `ocr_status = MANUAL_REVIEW_REQUIRED` and `manual_review_required = True`.
+- **Retry Capability:** Citizen can re-run OCR extraction through `POST /api/v1/documents/{document_id}/retry-ocr`.
+
+### Task D: Scheme Document Readiness Checklist
+- Implemented `GET /api/v1/documents/scheme/{scheme_id}/checklist` comparing a scheme's required documents against citizen's uploaded documents.
+- Includes statutory non-guarantee disclaimer: *"Document presence in your JanMitra vault verifies readiness for official submission, but does not replace government verification or guarantee scheme approval."*
+
+### Task E: Flutter Mobile Application (Vault Feature)
+- **Models & Service:** `DocumentMetadataModel`, `SchemeDocumentChecklistModel`, and `DocumentService` handling multipart HTTP uploads and vault operations.
+- **DocumentVaultScreen:** Modern citizen vault with total file counters, OCR verified count, review needed count, category filter chips, document cards with status badges and confidence chips, and floating action button.
+- **UploadDocumentDialog:** Bottom sheet supporting Camera, Gallery, and Custom File Picker (PDF/Image) with live progress indicators.
+- **DocumentDetailScreen:** Complete view of document metadata, extraction confidence progress bar, manual review warning banner, selectable monospace OCR text with copy-to-clipboard, retry OCR button, and delete document confirmation.
+- **SchemeDocumentChecklistWidget:** Embedded in `SchemeDetailsScreen` to show document readiness checklist with one-click upload for missing documents.
+
+### Task F: Testing & Quality Metrics
+- **Backend Pytest Suite:** **76 passed, 1 skipped (live PostgreSQL test), 0 failed** across 77 tests (including 13 dedicated vault & OCR tests).
+- **Flutter Test Suite:** **14 passed, 0 failed** across `document_widgets_test.dart`, `scheme_widgets_test.dart`, and `widget_test.dart`.
+- **Flutter Analysis:** **0 issues found** via `flutter analyze`.
+
 - [ ] **Phase 8:** Final Hardening, Integration & Academic Defense Preparation (PENDING USER INITIATION)

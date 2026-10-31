@@ -47,6 +47,13 @@ backups/database/*
 backups/documents/*
 !backups/documents/.gitkeep
 
+# Uploaded Citizen Documents Storage (Local disk storage)
+storage/
+backend/storage/
+backend/storage/*
+!backend/storage/.gitkeep
+
+
 # IDEs and OS files
 .vscode/
 .idea/

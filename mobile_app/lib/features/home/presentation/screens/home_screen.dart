@@ -10,7 +10,9 @@ import '../../../profile/presentation/screens/profile_view_screen.dart';
 import '../../../schemes/presentation/assessment_history_screen.dart';
 import '../../../schemes/presentation/recommended_schemes_screen.dart';
 import '../../../schemes/presentation/scheme_discovery_screen.dart';
+import '../../../documents/presentation/screens/document_vault_screen.dart';
 import '../widgets/welcome_card.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -441,8 +443,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+              // Phase 5 Active Citizen Document Vault Section
               const Text(
-                'Future Modules (Phases 5 - 8)',
+                'Citizen Document Vault & OCR',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -450,13 +453,106 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              _buildPhaseFeatureCard(
-                icon: Icons.document_scanner,
-                title: 'Document Vault & OCR',
-                description:
-                    'Upload required documents with on-device Tesseract OCR.',
-                phaseBadge: 'Phase 5',
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: AppTheme.accentGreen.withValues(alpha: 0.3)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentGreen.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.folder_shared, color: AppTheme.accentGreen, size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Document Vault',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.green.shade300),
+                                      ),
+                                      child: Text(
+                                        'Active',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Securely store certificates and identity documents with Google Cloud Vision OCR intelligence.',
+                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.folder_open, size: 16),
+                              label: const Text('Open Document Vault'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accentGreen,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const DocumentVaultScreen()),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
+              const SizedBox(height: 16),
+              const Text(
+                'Future Modules (Phases 6 - 8)',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
               _buildPhaseFeatureCard(
                 icon: Icons.psychology,
                 title: 'AI Advisory & Readiness Report',
@@ -470,6 +566,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 description: 'Razorpay test mode payments for premium guidance assistance.',
                 phaseBadge: 'Phase 7',
               ),
+              _buildPhaseFeatureCard(
+                icon: Icons.security,
+                title: 'Hardening & Deployment',
+                description: 'Enterprise penetration testing and cloud production release.',
+                phaseBadge: 'Phase 8',
+              ),
+
             ],
           ),
         ),

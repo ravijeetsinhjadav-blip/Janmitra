@@ -1,0 +1,346 @@
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../models/document_models.dart';
+import '../../services/document_service.dart';
+
+class UploadDocumentDialog extends StatefulWidget {
+  final String? initialDocumentType;
+  final VoidCallback? onUploadSuccess;
+
+  const UploadDocumentDialog({
+    super.key,
+    this.initialDocumentType,
+    this.onUploadSuccess,
+  });
+
+  static Future<DocumentMetadataModel?> show(
+    BuildContext context, {
+    String? initialDocumentType,
+    VoidCallback? onUploadSuccess,
+  }) {
+    return showModalBottomSheet<DocumentMetadataModel>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: UploadDocumentDialog(
+          initialDocumentType: initialDocumentType,
+          onUploadSuccess: onUploadSuccess,
+        ),
+      ),
+    );
+  }
+
+  @override
+  State<UploadDocumentDialog> createState() => _UploadDocumentDialogState();
+}
+
+class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
+  final DocumentService _documentService = DocumentService();
+  final ImagePicker _picker = ImagePicker();
+
+  late String _selectedType;
+  Uint8List? _fileBytes;
+  String? _fileName;
+  bool _isUploading = false;
+  String? _errorMessage;
+
+  final List<Map<String, String>> _documentTypes = [
+    {'value': 'income_certificate', 'label': 'Income Certificate'},
+    {'value': 'caste_certificate', 'label': 'Caste Certificate'},
+    {'value': 'domicile_certificate', 'label': 'Domicile Certificate'},
+    {'value': 'ration_card', 'label': 'Ration Card'},
+    {'value': 'aadhaar_card', 'label': 'Aadhaar Card'},
+    {'value': 'land_record', 'label': 'Land Record (7/12)'},
+    {'value': 'bank_passbook', 'label': 'Bank Passbook'},
+    {'value': 'other', 'label': 'Other Document'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedType = widget.initialDocumentType ?? 'income_certificate';
+  }
+
+  Future<void> _pickFromCamera() async {
+    setState(() => _errorMessage = null);
+    try {
+      final photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        setState(() {
+          _fileBytes = bytes;
+          _fileName = photo.name;
+        });
+      }
+    } catch (e) {
+      setState(() => _errorMessage = 'Failed to capture photo: $e');
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    setState(() => _errorMessage = null);
+    try {
+      final image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _fileBytes = bytes;
+          _fileName = image.name;
+        });
+      }
+    } catch (e) {
+      setState(() => _errorMessage = 'Failed to select image: $e');
+    }
+  }
+
+  Future<void> _pickFromFilePicker() async {
+    setState(() => _errorMessage = null);
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.bytes != null) {
+          setState(() {
+            _fileBytes = file.bytes;
+            _fileName = file.name;
+          });
+        }
+      }
+    } catch (e) {
+      setState(() => _errorMessage = 'Failed to select file: $e');
+    }
+  }
+
+  Future<void> _handleUpload() async {
+    if (_fileBytes == null || _fileName == null) {
+      setState(() => _errorMessage = 'Please choose a document to upload.');
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await _documentService.uploadDocument(
+        fileBytes: _fileBytes!,
+        filename: _fileName!,
+        documentType: _selectedType,
+      );
+
+      if (!mounted) return;
+      widget.onUploadSuccess?.call();
+      Navigator.of(context).pop(result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploading = false;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.upload_file, color: AppTheme.primaryBlue),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Upload to Document Vault',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.grey),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Document Type Selector
+          DropdownButtonFormField<String>(
+            initialValue: _selectedType,
+            decoration: const InputDecoration(
+              labelText: 'Document Classification',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            items: _documentTypes.map((t) {
+              return DropdownMenuItem<String>(
+                value: t['value'],
+                child: Text(t['label']!),
+              );
+            }).toList(),
+            onChanged: (val) {
+              if (val != null) setState(() => _selectedType = val);
+            },
+          ),
+          const SizedBox(height: 16),
+          // Source Options
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: const Text('Camera'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _isUploading ? null : _pickFromCamera,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.photo_library, size: 18),
+                  label: const Text('Gallery'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _isUploading ? null : _pickFromGallery,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.attach_file, size: 18),
+                  label: const Text('File'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _isUploading ? null : _pickFromFilePicker,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Selected File Indicator
+          if (_fileName != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _fileName!.endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image,
+                    color: AppTheme.primaryBlue,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _fileName!,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (_fileBytes != null)
+                          Text(
+                            '${(_fileBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB ready for OCR',
+                            style: const TextStyle(fontSize: 11, color: Colors.black54),
+                          ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _fileBytes = null;
+                        _fileName = null;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: (_fileBytes != null && !_isUploading) ? _handleUpload : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: _isUploading
+                ? const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Analyzing Document with OCR...'),
+                    ],
+                  )
+                : const Text('Upload & Run OCR Extraction', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Accepted: PDF, JPG, PNG (Max 10 MB). Safe local storage with zero cloud retention.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.black45),
+          ),
+        ],
+      ),
+    );
+  }
+}

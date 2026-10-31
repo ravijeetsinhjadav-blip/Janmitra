@@ -27,7 +27,15 @@ class ApiEndpoints {
   static String schemeAssess(String id) => '/api/v1/schemes/$id/assess';
   static String schemeAssessmentDetail(String id) => '/api/v1/schemes/assessments/$id';
 
-  // Future phase endpoints (Phases 5-8)
+  // Phase 5 Document Vault & OCR Pipeline
   static const String documents = '/api/v1/documents';
+  static const String documentUpload = '/api/v1/documents/upload';
+  static String documentDetail(String id) => '/api/v1/documents/$id';
+  static String documentDownload(String id) => '/api/v1/documents/$id/download';
+  static String documentRetryOcr(String id) => '/api/v1/documents/$id/retry-ocr';
+  static String schemeDocumentChecklist(String schemeId) => '/api/v1/documents/scheme/$schemeId/checklist';
+
+  // Future phase endpoints (Phases 6-8)
   static const String readiness = '/api/v1/readiness';
+
 }

@@ -4,6 +4,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../models/scheme_models.dart';
 import '../services/scheme_service.dart';
 import 'eligibility_result_screen.dart';
+import '../../documents/presentation/widgets/scheme_document_checklist_widget.dart';
+
+
 
 class SchemeDetailsScreen extends StatefulWidget {
   final SchemeModel scheme;
@@ -247,33 +250,22 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                           Icon(Icons.description, color: Colors.indigo, size: 20),
                           SizedBox(width: 6),
                           Text(
-                            'Required Documents Checklist',
+                            'Required Documents Readiness',
                             style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
-                      ...scheme.requiredDocuments.map((doc) => Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.check_box_outlined, size: 16, color: Colors.indigo),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    doc,
-                                    style: const TextStyle(fontSize: 13, height: 1.3),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )),
+                      const SizedBox(height: 12),
+                      SchemeDocumentChecklistWidget(
+                        schemeId: scheme.id,
+                        schemeName: scheme.schemeName,
+                      ),
                     ],
                   ),
                 ),
               ),
             const SizedBox(height: 12),
+
 
             // Application Process
             if (scheme.applicationProcess.isNotEmpty)

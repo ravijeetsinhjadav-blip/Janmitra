@@ -1,0 +1,190 @@
+import os
+import uuid
+import re
+from pathlib import Path
+from typing import Tuple, Optional
+from fastapi import HTTPException, status
+from app.core.config import settings
+
+# Recognized magic byte signatures
+MAGIC_SIGNATURES = {
+    "pdf": [b"%PDF"],
+    "jpg": [b"\xff\xd8\xff"],
+    "jpeg": [b"\xff\xd8\xff"],
+    "png": [b"\x89PNG\r\n\x1a\n", b"\x89PNG"],
+}
+
+MIME_TYPE_MAPPING = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+}
+
+
+class StorageService:
+    """Secure document storage manager.
+    
+    Adheres strictly to the JanMitra Assist Privacy & Security architecture:
+    - Binary files are stored exclusively on secure filesystem disk, NEVER in PostgreSQL.
+    - Path traversal attacks are mitigated by sanitizing filenames and using generated opaque UUID keys.
+    - Enforces magic byte verification to prevent extension spoofing.
+    - Enforces configurable maximum file size limit (default 10 MB).
+    """
+
+    def __init__(self, base_storage_path: Optional[str] = None):
+        self.base_path = Path(base_storage_path or settings.DOCUMENT_STORAGE_PATH).resolve()
+        self.base_path.mkdir(parents=True, exist_ok=True)
+
+    def validate_file(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        declared_content_type: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """Validate file size, extension, and content magic bytes.
+        
+        Returns:
+            Tuple of (detected_mime_type, normalized_extension)
+        Raises:
+            HTTPException with 400 status if validation fails.
+        """
+        # 1. Size check
+        if not file_bytes or len(file_bytes) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty.",
+            )
+
+        if len(file_bytes) > settings.MAX_DOCUMENT_FILE_SIZE_BYTES:
+            max_mb = settings.MAX_DOCUMENT_FILE_SIZE_BYTES // (1024 * 1024)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File size exceeds the maximum allowed limit of {max_mb} MB.",
+            )
+
+        # 2. Extension check
+        if not filename or "." not in filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid filename: missing extension.",
+            )
+
+        raw_ext = filename.rsplit(".", 1)[-1].strip().lower()
+        allowed = settings.allowed_extensions
+        if raw_ext not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file extension '.{raw_ext}'. Allowed formats: {', '.join(allowed)}.",
+            )
+
+        # Normalize ext
+        normalized_ext = "jpg" if raw_ext == "jpeg" else raw_ext
+
+        # 3. Magic byte signature verification
+        is_signature_valid = False
+        detected_format = None
+        for fmt, sigs in MAGIC_SIGNATURES.items():
+            for sig in sigs:
+                if file_bytes.startswith(sig):
+                    is_signature_valid = True
+                    detected_format = fmt
+                    break
+            if is_signature_valid:
+                break
+
+        if not is_signature_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File content signature validation failed. File is corrupt or spoofed.",
+            )
+
+        # Check format compatibility with extension
+        if detected_format in ("jpg", "jpeg") and raw_ext not in ("jpg", "jpeg"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File content (JPEG) does not match the provided file extension.",
+            )
+        if detected_format == "png" and raw_ext != "png":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File content (PNG) does not match the provided file extension.",
+            )
+        if detected_format == "pdf" and raw_ext != "pdf":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File content (PDF) does not match the provided file extension.",
+            )
+
+        mime_type = MIME_TYPE_MAPPING.get(raw_ext, declared_content_type or "application/octet-stream")
+        return mime_type, raw_ext
+
+    def sanitize_filename(self, filename: str) -> str:
+        """Strip insecure characters and path traversal segments from original filename."""
+        clean = Path(filename).name  # Strips directory paths
+        clean = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean)
+        return clean or "document"
+
+    def save_file(
+        self,
+        user_id: uuid.UUID,
+        file_bytes: bytes,
+        extension: str,
+    ) -> str:
+        """Persist file to disk using opaque UUID storage reference.
+        
+        Structure: <base_path>/<user_id>/<doc_uuid>.<ext>
+        Returns:
+            storage_reference string
+        """
+        user_folder = self.base_path / str(user_id)
+        user_folder.mkdir(parents=True, exist_ok=True)
+
+        opaque_filename = f"{uuid.uuid4().hex}.{extension.lower().lstrip('.')}"
+        target_path = user_folder / opaque_filename
+
+        with open(target_path, "wb") as f:
+            f.write(file_bytes)
+
+        # Storage reference is relative to base_path or a standardized key
+        # e.g., "storage/documents/<user_id>/<file>"
+        storage_reference = str(Path(str(user_id)) / opaque_filename).replace("\\", "/")
+        return storage_reference
+
+    def resolve_path(self, storage_reference: str) -> Path:
+        """Resolve storage reference safely, checking against directory traversal."""
+        # Normalize and resolve
+        resolved = (self.base_path / storage_reference).resolve()
+        # Verify the resolved path starts with the base path
+        try:
+            resolved.relative_to(self.base_path)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid storage reference or directory traversal detected.",
+            )
+        return resolved
+
+    def get_file_bytes(self, storage_reference: str) -> bytes:
+        """Read document binary content from disk."""
+        target_path = self.resolve_path(storage_reference)
+        if not target_path.exists() or not target_path.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document file not found on storage.",
+            )
+        return target_path.read_bytes()
+
+    def delete_file(self, storage_reference: str) -> bool:
+        """Safely delete document binary from disk."""
+        try:
+            target_path = self.resolve_path(storage_reference)
+            if target_path.exists() and target_path.is_file():
+                target_path.unlink()
+                return True
+        except Exception:
+            return False
+        return False
+
+
+storage_service = StorageService()

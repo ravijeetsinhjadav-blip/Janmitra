@@ -440,7 +440,42 @@ Includes 5 seed schemes with authentic nodal links, verified supporting document
 
 ---
 
-## 11. Common Troubleshooting
+## 11. Phase 5: Document Vault & OCR Pipeline
+
+### 11.1 Secure Document Vault Architecture
+- **Binary Segregation:** All uploaded files are stored strictly on local storage disk (`storage/documents/<user_id>/<doc_uuid>.<ext>`) and **NEVER** in PostgreSQL.
+- **Opaque Storage References:** Prevents user enumeration, URL guessing, and path leaks.
+- **Magic Byte Signature Validation:** Verifies file content headers directly:
+  - PDF: `%PDF` (`\x25\x50\x44\x46`)
+  - JPEG: `\xff\xd8\xff`
+  - PNG: `\x89PNG\r\n\x1a\n`
+- **File Constraints:** Validates extensions (`pdf, jpg, jpeg, png`) and enforces max file size (10 MB).
+- **IDOR Protection:** All vault endpoints verify authenticated citizen ownership using the JWT Bearer token claims.
+
+### 11.2 Google Cloud Vision OCR & Intelligent Extraction
+- **Production Integration:** Uses `google-cloud-vision` (`vision.ImageAnnotatorClient`) for document text and layout recognition when credentials are provided.
+- **Development / Mock Mode:** High-fidelity simulated extraction generating authentic text for Indian government documents (Income Certificate, Caste Certificate, Domicile, NFSA Ration Card, Aadhaar Card, Land Records).
+- **Confidence Scoring & Manual Review:**
+  - Computes weighted extraction confidence score (0.0 to 1.0).
+  - Scores below threshold (0.70) or blurred/unreadable scans automatically set `ocr_status = MANUAL_REVIEW_REQUIRED` and flag `manual_review_required = True`.
+- **Retry Processing:** Citizens can re-trigger OCR extraction on any uploaded document.
+
+### 11.3 Phase 5 API Endpoint Reference
+
+| Method | Endpoint | Auth Required | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/v1/documents/upload` | Bearer JWT | Upload document (PDF/JPG/PNG), validate magic bytes, store, and run OCR |
+| `GET` | `/api/v1/documents` | Bearer JWT | List citizen's vault documents with optional `document_type` and `ocr_status` filters |
+| `GET` | `/api/v1/documents/{id}` | Bearer JWT | Retrieve document metadata, OCR text, confidence, and review status |
+| `GET` | `/api/v1/documents/{id}/download` | Bearer JWT | Stream binary file with appropriate MIME type headers |
+| `DELETE` | `/api/v1/documents/{id}` | Bearer JWT | Permanently delete document file from disk and remove metadata record |
+| `POST` | `/api/v1/documents/{id}/retry-ocr` | Bearer JWT | Re-run OCR processing on existing document file |
+| `GET` | `/api/v1/documents/scheme/{scheme_id}/checklist` | Bearer JWT | Check scheme required documents against citizen vault with readiness status |
+
+---
+
+## 12. Common Troubleshooting
+
 
 ### 1. `OperationalError: connection to server at "localhost", port 5432 failed`
 - **Cause:** PostgreSQL service is stopped or port 5432 is not listening.
