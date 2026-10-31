@@ -99,6 +99,28 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
     return Colors.red.shade700;
   }
 
+  Color _getConsistencyColor(String status) {
+    switch (status) {
+      case 'Consistent':
+        return Colors.green;
+      case 'Review Required':
+        return Colors.orange.shade800;
+      case 'Discrepancy Detected':
+        return Colors.red.shade700;
+      case 'Not Evaluated (No Documents)':
+      case 'Not Evaluated':
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  Color _getFreshnessColor(String freshness) {
+    if (freshness == 'Verified Official Source') {
+      return Colors.green.shade800;
+    }
+    return Colors.orange.shade900;
+  }
+
   Widget _buildLanguagePill(String code, String label) {
     final isSelected = _selectedLanguage == code;
     return ChoiceChip(
@@ -331,16 +353,16 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: (readiness.consistencyStatus == 'Consistent' ? Colors.green : Colors.orange).withValues(alpha: 0.1),
+                          color: _getConsistencyColor(readiness.consistencyStatus).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: readiness.consistencyStatus == 'Consistent' ? Colors.green : Colors.orange),
+                          border: Border.all(color: _getConsistencyColor(readiness.consistencyStatus)),
                         ),
                         child: Text(
                           readiness.consistencyStatus,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: readiness.consistencyStatus == 'Consistent' ? Colors.green.shade800 : Colors.orange.shade800,
+                            color: _getConsistencyColor(readiness.consistencyStatus),
                           ),
                         ),
                       ),
@@ -593,8 +615,19 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                             Expanded(child: Text(cite.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)),
-                              child: Text(cite.sourceFreshnessStatus, style: TextStyle(fontSize: 10, color: Colors.green.shade800, fontWeight: FontWeight.bold)),
+                              decoration: BoxDecoration(
+                                color: _getFreshnessColor(cite.sourceFreshnessStatus).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: _getFreshnessColor(cite.sourceFreshnessStatus)),
+                              ),
+                              child: Text(
+                                cite.sourceFreshnessStatus,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: _getFreshnessColor(cite.sourceFreshnessStatus),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -614,3 +647,4 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
     );
   }
 }
+

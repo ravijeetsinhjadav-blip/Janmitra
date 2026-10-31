@@ -73,3 +73,4 @@ class AdvisoryAssessmentResponse(BaseModel):
 class AdvisoryRequest(BaseModel):
     """Citizen request parameters for AI advisory generation."""
     language: Optional[str] = Field(default="en", description="Language code: 'en', 'hi', or 'gu'")
+

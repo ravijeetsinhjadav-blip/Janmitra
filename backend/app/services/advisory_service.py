@@ -63,6 +63,7 @@ class AdvisoryService:
             scheme=scheme,
             criteria_match_percentage=assessment_res.criteria_match_percentage,
             missing_fields=assessment_res.missing_fields,
+            overall_status=assessment_res.overall_status,
         )
 
         # 3. Retrieve relevant RAG official knowledge chunks
@@ -78,7 +79,11 @@ class AdvisoryService:
                 "chunk_category": c.chunk_category,
                 "chunk_content": c.chunk_content,
                 "source_title": c.source_title,
-                "source_reference": c.source_reference,
+                "source_reference": (
+                    f"[WARNING: {c.source_freshness_status.upper()}] {c.source_reference}"
+                    if c.source_freshness_status != "Verified Official Source"
+                    else c.source_reference
+                ),
                 "source_url": c.source_url,
                 "source_freshness_status": c.source_freshness_status,
                 "is_demo_data": c.is_demo_data,
@@ -194,6 +199,7 @@ class AdvisoryService:
             scheme=scheme,
             criteria_match_percentage=criteria_match,
             missing_fields=missing_fields,
+            overall_status=overall_status,
         )
 
         # Retrieve RAG chunks
@@ -209,7 +215,11 @@ class AdvisoryService:
                 "chunk_category": c.chunk_category,
                 "chunk_content": c.chunk_content,
                 "source_title": c.source_title,
-                "source_reference": c.source_reference,
+                "source_reference": (
+                    f"[WARNING: {c.source_freshness_status.upper()}] {c.source_reference}"
+                    if c.source_freshness_status != "Verified Official Source"
+                    else c.source_reference
+                ),
                 "source_url": c.source_url,
                 "source_freshness_status": c.source_freshness_status,
                 "is_demo_data": c.is_demo_data,
@@ -310,3 +320,4 @@ class AdvisoryService:
             official_source_url=scheme.official_source_url,
             official_application_url=scheme.official_application_url,
         )
+

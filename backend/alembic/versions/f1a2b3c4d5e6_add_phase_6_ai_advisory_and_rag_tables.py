@@ -67,3 +67,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_scheme_knowledge_chunks_scheme_id'), table_name='scheme_knowledge_chunks')
     op.drop_index(op.f('ix_scheme_knowledge_chunks_id'), table_name='scheme_knowledge_chunks')
     op.drop_table('scheme_knowledge_chunks')
+
