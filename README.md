@@ -388,10 +388,14 @@ JanMitra Assist implements a **mobile number OTP-based authentication architectu
 cd mobile_app
 ..\flutter\bin\flutter.bat test
 ```
-All 3 widget tests pass:
+All 7 widget and unit tests pass cleanly:
 - App launch & splash screen verification
 - Citizen sign-in & validation UI
 - Home screen citizen status & navigation
+- Scheme discovery UI elements & category filter chips
+- Scheme details view, benefits, and eligibility check button
+- Eligibility result determination with advisory disclaimer
+- Home screen Phase 4 active card verification
 
 ### 9.4 Running Flutter Static Analysis
 ```powershell
@@ -402,7 +406,40 @@ Verified **0 issues found**.
 
 ---
 
-## 10. Common Troubleshooting
+## 10. Phase 4: Government Scheme Discovery & Eligibility Engine
+
+### 10.1 Deterministic Eligibility Engine
+The core rule evaluation engine (`EligibilityEngine` in `backend/app/services/eligibility_service.py`) deterministically checks citizen profile attributes against structured rule conditions:
+- **Supported Comparison Operators:** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `contains`.
+- **Dynamic Age Calculation:** Derived dynamically from citizen `date_of_birth` without requiring manual age entry.
+- **Handling Incomplete Profiles:** If a required fact is absent, the condition is classified as `unknown` (never failed), and the overall determination is set to `Insufficient Information` with actionable guidance on missing fields.
+- **Explainable Outcomes:** Detailed condition-by-condition analysis with actual vs expected values and plain-language explanations.
+- **Advisory Readiness Score:** Calculated on a 0.0% to 100.0% scale reflecting application preparedness.
+- **Statutory Advisory Disclaimer:** All assessments explicitly state they are advisory only and do not replace official government determinations.
+
+### 10.2 Curated Verified Government Schemes (Demo Data)
+Includes 5 seed schemes with authentic nodal links:
+1. **PM-KISAN:** Central sector scheme providing ₹6,000/year to landholding farmer families (`https://pmkisan.gov.in/`).
+2. **Ayushman Bharat (AB-PMJAY):** Secondary and tertiary healthcare coverage up to ₹5 Lakh/family/year (`https://pmjay.gov.in/`).
+3. **PMAY-G (Gramin):** Rural housing assistance for pucca house construction (`https://pmayg.nic.in/`).
+4. **NSP Post-Matric Scholarship:** Higher education scholarship for students with family income <= ₹2.5 Lakh (`https://scholarships.gov.in/`).
+5. **Maharashtra MJPJAY:** State health scheme providing cashless hospitalisation up to ₹5 Lakh for ration card holders (`https://www.jeevandayee.gov.in/`).
+
+### 10.3 Phase 4 API Endpoint Reference
+
+| Method | Endpoint | Auth Required | Description |
+| :--- | :--- | :---: | :--- |
+| `GET` | `/api/v1/schemes` | No | Paginated scheme catalog with `q`, `category`, and `state` filters |
+| `GET` | `/api/v1/schemes/categories` | No | Sector categories with active scheme counts |
+| `GET` | `/api/v1/schemes/recommendations` | Bearer JWT | Profile-based recommendations with match scores & reasons |
+| `GET` | `/api/v1/schemes/{id}` | No | Full scheme details, benefits, criteria, required documents, URLs |
+| `POST` | `/api/v1/schemes/{id}/assess` | Bearer JWT | Run deterministic eligibility check and persist record |
+| `GET` | `/api/v1/schemes/assessments/history` | Bearer JWT | Paginated history of citizen's past assessments |
+| `GET` | `/api/v1/schemes/assessments/{id}` | Bearer JWT | Retrieve past assessment run with user ownership validation |
+
+---
+
+## 11. Common Troubleshooting
 
 ### 1. `OperationalError: connection to server at "localhost", port 5432 failed`
 - **Cause:** PostgreSQL service is stopped or port 5432 is not listening.

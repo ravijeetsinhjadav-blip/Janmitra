@@ -159,3 +159,4 @@ class TestPostgresLiveIntegration:
         finally:
             db.rollback()
             db.close()
+

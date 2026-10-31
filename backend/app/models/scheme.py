@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text, Boolean, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -31,6 +31,18 @@ class Scheme(Base):
         nullable=False,
         comment="Detailed overview of objectives, benefits, and coverage",
     )
+    short_description = Column(
+        String(500),
+        nullable=True,
+        comment="Concise single-paragraph summary for mobile cards",
+    )
+    category = Column(
+        String(100),
+        nullable=False,
+        default="General",
+        index=True,
+        comment="Sector category: Agriculture, Healthcare, Education, Housing, etc.",
+    )
     department = Column(
         String(200),
         nullable=False,
@@ -49,6 +61,36 @@ class Scheme(Base):
         nullable=False,
         comment="Summary of eligibility criteria (age, income, occupation, etc.)",
     )
+    benefits = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        comment="List of financial and material benefits as JSONB array",
+    )
+    eligibility_criteria = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        comment="Structured rule conditions evaluated deterministically by the eligibility engine",
+    )
+    required_profile_fields = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        comment="List of citizen profile field names required for complete evaluation",
+    )
+    application_process = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        comment="Step-by-step guidance on how citizen completes application on government portal",
+    )
+    required_documents = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        comment="Informational checklist of official documentation required",
+    )
     official_source_url = Column(
         String(500),
         nullable=False,
@@ -64,12 +106,26 @@ class Scheme(Base):
         nullable=True,
         comment="Timestamp when scheme source information was last verified",
     )
+    status = Column(
+        String(20),
+        nullable=False,
+        default="active",
+        index=True,
+        comment="Scheme status: 'active', 'inactive', 'discontinued'",
+    )
     is_active = Column(
         Boolean,
         default=True,
         nullable=False,
         index=True,
         comment="Flag indicating whether scheme is currently accepting applications",
+    )
+    is_demo_data = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+        comment="Flag designating demo / test seed data vs live government records",
     )
     created_at = Column(
         DateTime(timezone=True),

@@ -18,9 +18,16 @@ class ApiEndpoints {
   static const String userProfile = '/api/v1/users/me/profile';
   static const String userDeleteRequest = '/api/v1/users/me/delete-request';
 
-  // Future phase endpoints
+  // Phase 4 Government Scheme Discovery & Eligibility Engine
   static const String schemes = '/api/v1/schemes';
+  static const String schemeCategories = '/api/v1/schemes/categories';
+  static const String schemeRecommendations = '/api/v1/schemes/recommendations';
+  static const String schemeAssessmentsHistory = '/api/v1/schemes/assessments/history';
+  static String schemeDetail(String id) => '/api/v1/schemes/$id';
+  static String schemeAssess(String id) => '/api/v1/schemes/$id/assess';
+  static String schemeAssessmentDetail(String id) => '/api/v1/schemes/assessments/$id';
+
+  // Future phase endpoints (Phases 5-8)
   static const String documents = '/api/v1/documents';
-  static const String eligibility = '/api/v1/eligibility';
   static const String readiness = '/api/v1/readiness';
 }

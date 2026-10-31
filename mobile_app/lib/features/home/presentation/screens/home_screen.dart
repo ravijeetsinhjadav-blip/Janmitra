@@ -7,6 +7,9 @@ import '../../../auth/presentation/screens/login_screen.dart';
 import '../../../profile/models/user_profile_model.dart';
 import '../../../profile/presentation/screens/profile_setup_screen.dart';
 import '../../../profile/presentation/screens/profile_view_screen.dart';
+import '../../../schemes/presentation/assessment_history_screen.dart';
+import '../../../schemes/presentation/recommended_schemes_screen.dart';
+import '../../../schemes/presentation/scheme_discovery_screen.dart';
 import '../widgets/welcome_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -57,7 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out of JanMitra Assist?'),
+        content:
+            const Text('Are you sure you want to sign out of JanMitra Assist?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -65,7 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
             child: const Text('Sign Out'),
           ),
         ],
@@ -121,7 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(6),
@@ -199,9 +205,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             children: [
                               CircleAvatar(
-                                backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                backgroundColor:
+                                    AppTheme.primaryBlue.withValues(alpha: 0.1),
                                 radius: 20,
-                                child: const Icon(Icons.person, color: AppTheme.primaryBlue),
+                                child: const Icon(Icons.person,
+                                    color: AppTheme.primaryBlue),
                               ),
                               const SizedBox(width: 12),
                               Column(
@@ -217,15 +225,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   Text(
-                                    _mobileNumber != null ? '+91 $_mobileNumber' : 'Mobile Verified',
-                                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                                    _mobileNumber != null
+                                        ? '+91 $_mobileNumber'
+                                        : 'Mobile Verified',
+                                    style: const TextStyle(
+                                        fontSize: 13, color: Colors.black54),
                                   ),
                                 ],
                               ),
                             ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.green.shade50,
                               borderRadius: BorderRadius.circular(12),
@@ -249,9 +261,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             children: [
                               Icon(
-                                _profile != null ? Icons.check_circle : Icons.warning_amber_rounded,
+                                _profile != null
+                                    ? Icons.check_circle
+                                    : Icons.warning_amber_rounded,
                                 size: 18,
-                                color: _profile != null ? AppTheme.accentGreen : Colors.orange,
+                                color: _profile != null
+                                    ? AppTheme.accentGreen
+                                    : Colors.orange,
                               ),
                               const SizedBox(width: 8),
                               Text(
@@ -261,7 +277,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: _profile != null ? AppTheme.accentGreen : Colors.orange.shade800,
+                                  color: _profile != null
+                                      ? AppTheme.accentGreen
+                                      : Colors.orange.shade800,
                                 ),
                               ),
                             ],
@@ -270,16 +288,151 @@ class _HomeScreenState extends State<HomeScreen> {
                             onPressed: () async {
                               if (_profile != null) {
                                 await Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const ProfileViewScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ProfileViewScreen()),
                                 );
                               } else {
                                 await Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ProfileSetupScreen()),
                                 );
                               }
                               _loadCitizenData();
                             },
-                            child: Text(_profile != null ? 'View Profile' : 'Complete Now'),
+                            child: Text(_profile != null
+                                ? 'View Profile'
+                                : 'Complete Now'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Phase 4 Active Government Scheme Engine Section
+              const Text(
+                'Government Schemes & Advisory',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.account_balance, color: AppTheme.primaryBlue, size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Explore Welfare Schemes',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.green.shade300),
+                                      ),
+                                      child: Text(
+                                        'Active',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Search central & state schemes, assess likely eligibility, and access official application portals.',
+                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.search, size: 16),
+                              label: const Text('Browse All Schemes'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryBlue,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const SchemeDiscoveryScreen()),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.auto_awesome, size: 16, color: Colors.amber),
+                              label: const Text('My Matches'),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const RecommendedSchemesScreen()),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.history, size: 16, color: AppTheme.primaryBlue),
+                              label: const Text('Assessments'),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen()),
+                                );
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -289,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Upcoming Modules (Phases 4 - 8)',
+                'Future Modules (Phases 5 - 8)',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -298,22 +451,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 8),
               _buildPhaseFeatureCard(
-                icon: Icons.search,
-                title: 'Government Scheme Discovery',
-                description: 'Search central and state schemes by ministry and benefits.',
-                phaseBadge: 'Phase 4',
-              ),
-              _buildPhaseFeatureCard(
                 icon: Icons.document_scanner,
                 title: 'Document Vault & OCR',
-                description: 'Upload required documents with on-device Tesseract OCR.',
+                description:
+                    'Upload required documents with on-device Tesseract OCR.',
                 phaseBadge: 'Phase 5',
               ),
               _buildPhaseFeatureCard(
                 icon: Icons.psychology,
                 title: 'AI Advisory & Readiness Report',
-                description: 'Ollama local Llama 3.2 1B advisory eligibility intelligence.',
+                description:
+                    'Ollama local Llama 3.2 1B advisory eligibility intelligence.',
                 phaseBadge: 'Phase 6',
+              ),
+              _buildPhaseFeatureCard(
+                icon: Icons.payment,
+                title: 'Assisted Service & Payments',
+                description: 'Razorpay test mode payments for premium guidance assistance.',
+                phaseBadge: 'Phase 7',
               ),
             ],
           ),
