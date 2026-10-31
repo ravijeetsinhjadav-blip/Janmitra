@@ -6,7 +6,7 @@ from sqlalchemy import func
 from fastapi import HTTPException, status
 
 from app.models.subscription import Subscription, PLAN_TYPES, BILLING_CYCLES
-from app.models.document import DocumentMetadata
+from app.models.document import DocumentMetadata, DocumentProcessingStatus
 from app.models.assessment import Assessment
 from app.schemas.subscription import (
     SubscriptionPlanItem,
@@ -67,6 +67,7 @@ class SubscriptionService:
                 features=[
                     "Everything in Free Plan",
                     f"Up to {settings.PREMIUM_MONTHLY_DOC_ANALYSES_LIMIT} AI document analyses per month",
+                    f"Expanded AI advisory guidance (up to {settings.PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT} sessions per month)",
                     "Advanced document consistency & identity cross-checks",
                     "Priority application assistance with interactive checklists",
                     "Common mistakes alerts (merged bank IFSCs, spelling mismatches)",
@@ -132,7 +133,9 @@ class SubscriptionService:
 
     @classmethod
     def get_quota_status(cls, db: Session, user_id: uuid.UUID) -> UsageQuotaStatus:
-        """Calculate current calendar month usage against plan quota limits."""
+        """Calculate current calendar month usage against plan quota limits.
+        SEC-05: Exclude OCR_FAILED documents so citizens are not penalized for failed extractions.
+        """
         now = datetime.now(timezone.utc)
         month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
         # Next month reset date
@@ -155,11 +158,16 @@ class SubscriptionService:
             else settings.FREE_MONTHLY_AI_GUIDANCE_LIMIT
         )
 
-        # Count document analyses this month
+        # Count usable document analyses this month (SEC-05)
+        # Excludes OCR_FAILED documents
         doc_count = (
             db.query(func.count(DocumentMetadata.id))
             .filter(
                 DocumentMetadata.user_id == user_id,
+                DocumentMetadata.ocr_status.in_([
+                    DocumentProcessingStatus.OCR_COMPLETED,
+                    DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED,
+                ]),
                 DocumentMetadata.created_at >= month_start,
             )
             .scalar()
@@ -229,15 +237,17 @@ class SubscriptionService:
     def get_citizen_subscription_response(
         cls, db: Session, user_id: uuid.UUID
     ) -> CitizenSubscriptionResponse:
-        """Return formatted response of citizen's current subscription status and quota."""
+        """Retrieve user's full subscription details with quota usage matching schema."""
         sub = cls.get_active_subscription(db, user_id)
         quota = cls.get_quota_status(db, user_id)
 
-        now = datetime.now(timezone.utc)
-        days_rem = None
-        end_utc = _normalize_dt(sub.end_date)
-        if end_utc and end_utc > now:
-            days_rem = (end_utc - now).days + 1
+        # Days remaining for paid subscription
+        days_remaining = None
+        if sub.end_date:
+            end_utc = _normalize_dt(sub.end_date)
+            now_utc = datetime.now(timezone.utc)
+            delta = end_utc - now_utc
+            days_remaining = max(0, delta.days)
 
         return CitizenSubscriptionResponse(
             user_id=user_id,
@@ -247,7 +257,7 @@ class SubscriptionService:
             is_active=(sub.status == "active"),
             start_date=sub.start_date,
             end_date=sub.end_date,
-            days_remaining=days_rem,
+            days_remaining=days_remaining,
             usage=quota,
         )
 
@@ -259,48 +269,68 @@ class SubscriptionService:
         billing_cycle: str,
         transaction_id: Optional[uuid.UUID] = None,
     ) -> Subscription:
-        """Activate or extend Premium subscription for authenticated citizen."""
+        """Activate or extend a citizen's Premium subscription."""
         now = datetime.now(timezone.utc)
-        duration_days = 365 if billing_cycle.lower() == "yearly" else 30
+        cycle = billing_cycle.lower()
 
-        # Check existing active subscription
-        existing_sub = (
+        # Calculate duration
+        if cycle == "yearly":
+            duration = timedelta(days=365)
+        elif cycle == "monthly":
+            duration = timedelta(days=30)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid billing cycle '{billing_cycle}'. Expected 'monthly' or 'yearly'.",
+            )
+
+        # Check existing active subscription to extend or start new
+        current_sub = (
             db.query(Subscription)
             .filter(
                 Subscription.user_id == user_id,
                 Subscription.plan_type == "premium",
                 Subscription.status == "active",
             )
+            .order_by(Subscription.end_date.desc())
             .first()
         )
 
-        existing_end = _normalize_dt(existing_sub.end_date) if existing_sub else None
-        if existing_sub and existing_end and existing_end > now:
-            # Extend existing subscription
-            new_end = existing_end + timedelta(days=duration_days)
-            existing_sub.end_date = new_end
-            existing_sub.billing_cycle = billing_cycle
-            existing_sub.updated_at = now
-            sub_to_return = existing_sub
-        else:
-            # Create new premium subscription
-            new_end = now + timedelta(days=duration_days)
-            new_sub = Subscription(
-                id=uuid.uuid4(),
-                user_id=user_id,
-                plan_type="premium",
-                billing_cycle=billing_cycle.lower(),
-                status="active",
-                start_date=now,
-                end_date=new_end,
-            )
-            db.add(new_sub)
-            sub_to_return = new_sub
+        if current_sub and current_sub.end_date:
+            current_end = _normalize_dt(current_sub.end_date)
+            if current_end and current_end > now:
+                new_start = current_sub.start_date
+                new_end = current_end + duration
+                current_sub.end_date = new_end
+                current_sub.billing_cycle = cycle
+                db.commit()
+                db.refresh(current_sub)
+                logger.info(
+                    f"Extended existing premium subscription {current_sub.id} "
+                    f"for user {user_id} until {new_end}"
+                )
+                return current_sub
 
-        db.commit()
-        db.refresh(sub_to_return)
-        logger.info(
-            f"Activated Premium subscription for user {user_id} "
-            f"cycle={billing_cycle} valid until {sub_to_return.end_date}"
+        # Deactivate any previous active subscriptions
+        db.query(Subscription).filter(
+            Subscription.user_id == user_id,
+            Subscription.status == "active",
+        ).update({"status": "superseded"})
+
+        # Create new premium subscription
+        new_sub = Subscription(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            plan_type="premium",
+            billing_cycle=cycle,
+            status="active",
+            start_date=now,
+            end_date=now + duration,
         )
-        return sub_to_return
+        db.add(new_sub)
+        db.commit()
+        db.refresh(new_sub)
+        logger.info(
+            f"Activated new premium subscription {new_sub.id} for user {user_id} until {new_sub.end_date}"
+        )
+        return new_sub

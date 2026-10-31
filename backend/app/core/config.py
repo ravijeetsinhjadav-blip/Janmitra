@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, model_validator
 
 
 class Settings(BaseSettings):
@@ -88,6 +88,19 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
+
+    @model_validator(mode="after")
+    def validate_production_payment_configuration(self) -> "Settings":
+        if self.ENVIRONMENT == "production":
+            if self.RAZORPAY_DEV_MODE:
+                raise ValueError("CRITICAL SECURITY ERROR: RAZORPAY_DEV_MODE cannot be enabled in production.")
+            if not self.RAZORPAY_KEY_ID or self.RAZORPAY_KEY_ID == "rzp_test_janmitra_dev_key":
+                raise ValueError("CRITICAL SECURITY ERROR: Live RAZORPAY_KEY_ID required in production.")
+            if not self.RAZORPAY_KEY_SECRET or "dev_32char" in self.RAZORPAY_KEY_SECRET:
+                raise ValueError("CRITICAL SECURITY ERROR: Live RAZORPAY_KEY_SECRET required in production.")
+            if not self.RAZORPAY_WEBHOOK_SECRET or "dev_32char" in self.RAZORPAY_WEBHOOK_SECRET:
+                raise ValueError("CRITICAL SECURITY ERROR: Live RAZORPAY_WEBHOOK_SECRET required in production.")
+        return self
 
     @property
     def sync_database_url(self) -> str:

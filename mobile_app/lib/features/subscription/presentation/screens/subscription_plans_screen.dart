@@ -1,9 +1,9 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'package:janmitra_assist/features/subscription/models/subscription_models.dart';
 import 'package:janmitra_assist/features/subscription/services/subscription_service.dart';
+import 'package:janmitra_assist/features/subscription/services/razorpay_checkout_adapter.dart';
 import 'payment_success_screen.dart';
 import 'payment_failure_screen.dart';
 import 'payment_history_screen.dart';
@@ -11,11 +11,13 @@ import 'payment_history_screen.dart';
 class SubscriptionPlansScreen extends StatefulWidget {
   final CitizenSubscriptionModel? initialSubscription;
   final SubscriptionPlansResponseModel? initialPlans;
+  final RazorpayCheckoutAdapter? checkoutAdapter;
 
   const SubscriptionPlansScreen({
     super.key,
     this.initialSubscription,
     this.initialPlans,
+    this.checkoutAdapter,
   });
 
   @override
@@ -25,6 +27,7 @@ class SubscriptionPlansScreen extends StatefulWidget {
 
 class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   final SubscriptionService _service = SubscriptionService();
+  late final RazorpayCheckoutAdapter _checkoutAdapter;
 
   CitizenSubscriptionModel? _subscription;
   SubscriptionPlansResponseModel? _plansResponse;
@@ -32,16 +35,30 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   bool _isProcessingPayment = false;
   String? _errorMessage;
   String _selectedCycle = 'monthly'; // 'monthly' or 'yearly'
+  String? _pendingOrderId;
 
   @override
   void initState() {
     super.initState();
+    _checkoutAdapter = widget.checkoutAdapter ?? LiveRazorpayAdapter();
+    _checkoutAdapter.init(
+      onSuccess: _handlePaymentSuccess,
+      onError: _handlePaymentError,
+      onExternalWallet: _handleExternalWallet,
+    );
+
     if (widget.initialSubscription != null && widget.initialPlans != null) {
       _subscription = widget.initialSubscription;
       _plansResponse = widget.initialPlans;
     } else {
       _loadData();
     }
+  }
+
+  @override
+  void dispose() {
+    _checkoutAdapter.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -77,34 +94,75 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     });
 
     try {
-      // 1. Create secure order on backend
+      // 1. Create secure server-side order on backend (SEC-01)
       final order = await _service.createOrder(billingCycle: _selectedCycle);
 
       if (!mounted) return;
 
-      // 2. Open payment method dialog (UPI, QR, Cards)
-      final method = await _showPaymentMethodSheet(order);
-      if (method == null) {
+      // 2. Open official Razorpay Checkout SDK via decoupled adapter (SEC-02)
+      _pendingOrderId = order.orderId;
+      final options = {
+        'key': order.keyId,
+        'amount': order.amount, // in paise
+        'name': 'JanMitra Assist',
+        'description':
+            'JanMitra Premium (${_selectedCycle == 'yearly' ? 'Annual' : 'Monthly'}) Subscription',
+        'order_id': order.orderId,
+        'currency': order.currency,
+        'timeout': 180,
+        'prefill': {
+          'contact': '',
+          'email': '',
+        },
+        'theme': {
+          'color': '#0F766E',
+        },
+      };
+
+      _checkoutAdapter.open(options);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessingPayment = false;
+      });
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PaymentFailureScreen(
+            errorMessage: e.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    final paymentId = response.paymentId;
+    final orderId = response.orderId ?? _pendingOrderId;
+    final signature = response.signature;
+
+    if (paymentId == null || orderId == null || signature == null) {
+      if (mounted) {
         setState(() {
           _isProcessingPayment = false;
         });
-        return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const PaymentFailureScreen(
+              errorMessage:
+                  'Payment completed but missing signature verification payload from gateway.',
+            ),
+          ),
+        );
       }
+      return;
+    }
 
-      // 3. Process payment confirmation
-      // Generates simulated Razorpay payment signature in dev mode
-      final paymentId = 'pay_${DateTime.now().millisecondsSinceEpoch}';
-      final devSecret = 'janmitra_razorpay_secret_dev_32char';
-      final payloadBytes = utf8.encode('${order.orderId}|$paymentId');
-      final signature = Hmac(sha256, utf8.encode(devSecret))
-          .convert(payloadBytes)
-          .toString();
-
+    try {
+      // 3. Cryptographically verify signature server-side (SEC-02, SEC-03)
       final verifyRes = await _service.verifyPayment(
-        orderId: order.orderId,
+        orderId: orderId,
         paymentId: paymentId,
         signature: signature,
-        paymentMethod: method,
       );
 
       if (!mounted) return;
@@ -113,7 +171,6 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         _subscription = verifyRes.subscription;
       });
 
-      // Navigate to success receipt screen
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) =>
@@ -137,94 +194,26 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     }
   }
 
-  Future<String?> _showPaymentMethodSheet(RazorpayOrderModel order) {
-    return showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.payment, color: AppTheme.primaryBlue),
-                    SizedBox(width: 8),
-                    Text(
-                      'Razorpay Secure Checkout',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  '₹${order.amountInr.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.accentGreen,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Order: ${order.orderId}',
-              style: TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: Colors.grey.shade600,
-              ),
-            ),
-            const Divider(height: 24),
-            const Text(
-              'Select Payment Instrument:',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.blue,
-                child: Icon(Icons.qr_code, color: Colors.white, size: 20),
-              ),
-              title: const Text('UPI QR / Intent'),
-              subtitle: const Text('Google Pay, PhonePe, Paytm, BHIM'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(ctx).pop('upi_qr'),
-            ),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.teal.shade700,
-                child: const Icon(Icons.credit_card, color: Colors.white, size: 20),
-              ),
-              title: const Text('Debit / Credit Cards'),
-              subtitle: const Text('Visa, MasterCard, RuPay'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(ctx).pop('card'),
-            ),
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.deepPurple.shade700,
-                child: const Icon(Icons.account_balance,
-                    color: Colors.white, size: 20),
-              ),
-              title: const Text('Net Banking'),
-              subtitle: const Text('All Major Indian Banks'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(ctx).pop('netbanking'),
-            ),
-            const SizedBox(height: 12),
-          ],
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    setState(() {
+      _isProcessingPayment = false;
+    });
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PaymentFailureScreen(
+          errorMessage: response.message ?? 'Payment failed or was cancelled.',
+          orderId: _pendingOrderId,
         ),
+      ),
+    );
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Selected external wallet: ${response.walletName}'),
       ),
     );
   }
@@ -327,7 +316,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           // Plan Cards
           if (_plansResponse != null)
             ..._plansResponse!.plans.map(
-              (plan) => _buildPlanCard(plan, isCurrent: (plan.planType == (isPremium ? 'premium' : 'free'))),
+              (plan) => _buildPlanCard(plan,
+                  isCurrent: (plan.planType == (isPremium ? 'premium' : 'free'))),
             ),
 
           const SizedBox(height: 16),
@@ -451,12 +441,14 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         ),
         const SizedBox(height: 4),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: ratio,
-            backgroundColor: Colors.grey.shade200,
-            color: isNearLimit ? Colors.orange.shade800 : AppTheme.primaryBlue,
             minHeight: 6,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isNearLimit ? Colors.orange.shade700 : AppTheme.primaryBlue,
+            ),
           ),
         ),
       ],
@@ -465,26 +457,105 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
 
   Widget _buildBillingCycleSwitcher() {
     return Container(
-      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
       ),
+      padding: const EdgeInsets.all(4),
       child: Row(
         children: [
           Expanded(
-            child: _buildCycleTab(
-              id: 'monthly',
-              title: 'Monthly (₹99)',
-              subtitle: 'Billed monthly',
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedCycle = 'monthly'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: _selectedCycle == 'monthly'
+                      ? Colors.white
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: _selectedCycle == 'monthly'
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(20),
+                            blurRadius: 4,
+                          )
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
+                    'Monthly (₹99)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: _selectedCycle == 'monthly'
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color: _selectedCycle == 'monthly'
+                          ? AppTheme.primaryDark
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           Expanded(
-            child: _buildCycleTab(
-              id: 'yearly',
-              title: 'Yearly (₹799)',
-              subtitle: 'Save ~33%',
-              badge: 'Best Value',
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedCycle = 'yearly'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: _selectedCycle == 'yearly'
+                      ? Colors.white
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: _selectedCycle == 'yearly'
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(20),
+                            blurRadius: 4,
+                          )
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Yearly (₹799)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: _selectedCycle == 'yearly'
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: _selectedCycle == 'yearly'
+                              ? AppTheme.primaryDark
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentGreen,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          'Save ~33%',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -492,98 +563,19 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     );
   }
 
-  Widget _buildCycleTab({
-    required String id,
-    required String title,
-    required String subtitle,
-    String? badge,
-  }) {
-    final isSelected = _selectedCycle == id;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedCycle = id;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(15),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              : null,
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.w600,
-                    color: isSelected ? AppTheme.primaryBlue : Colors.grey.shade700,
-                  ),
-                ),
-                if (badge != null) ...[
-                  const SizedBox(width: 4),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade600,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Text(
-                      badge,
-                      style: const TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 10,
-                color: isSelected ? AppTheme.accentGreen : Colors.grey.shade600,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildPlanCard(SubscriptionPlanModel plan, {required bool isCurrent}) {
     final isPremium = plan.planType == 'premium';
-    final price = _selectedCycle == 'yearly' ? plan.priceYearly : plan.priceMonthly;
-    final priceLabel =
-        price == 0 ? 'Free' : '₹${price.toStringAsFixed(0)} / ${_selectedCycle == 'yearly' ? 'year' : 'month'}';
+    final priceLabel = isPremium
+        ? (_selectedCycle == 'yearly' ? '₹799 / year' : '₹99 / month')
+        : 'Free Forever';
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
       elevation: isPremium ? 3 : 1,
+      margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isPremium
-              ? AppTheme.primaryBlue.withAlpha(120)
-              : Colors.grey.shade300,
+          color: isPremium ? AppTheme.accentGreen : Colors.grey.shade300,
           width: isPremium ? 1.5 : 1.0,
         ),
       ),

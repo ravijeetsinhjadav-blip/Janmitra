@@ -13,6 +13,7 @@ from app.schemas.assistance import (
     ApplicationInfoGuide,
 )
 from app.services.assistance_service import AssistanceService
+from app.services.subscription_service import SubscriptionService
 
 router = APIRouter(tags=["Application Assistance"])
 
@@ -33,7 +34,10 @@ def prepare_application(
     current_user: User = Depends(get_current_active_citizen),
     db: Session = Depends(get_db),
 ):
-    """Generate personalized application preparation plan for a scheme."""
+    """Generate personalized application preparation plan for a scheme.
+    Enforces monthly AI guidance quota before execution (SEC-06).
+    """
+    SubscriptionService.enforce_ai_guidance_quota(db=db, user_id=current_user.id)
     return AssistanceService.generate_or_get_assistance(
         db=db,
         user_id=current_user.id,
@@ -81,10 +85,9 @@ def get_scheme_guide(
     language: str = Query(default="en", description="Guidance language code: en, hi, gu"),
     db: Session = Depends(get_db),
 ):
-    """Retrieve public application guide for a scheme."""
+    """Retrieve public application guide for a scheme with database-level caching (SEC-06)."""
     return AssistanceService.get_scheme_guide(
         db=db,
         scheme_id=scheme_id,
         language=language,
     )
-

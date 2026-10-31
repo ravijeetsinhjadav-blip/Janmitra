@@ -11,7 +11,7 @@ from app.models.otp import OTPChallenge
 from app.models.session import UserSession
 from app.models.account_deletion import AccountDeletionRequest
 from app.models.scheme_knowledge import SchemeKnowledgeChunk
-from app.models.payment import PaymentTransaction, PAYMENT_STATUSES, PAYMENT_METHODS
+from app.models.payment import PaymentTransaction, WebhookEvent, PAYMENT_STATUSES, PAYMENT_METHODS
 
 __all__ = [
     "Base",
@@ -26,6 +26,7 @@ __all__ = [
     "PLAN_TYPES",
     "BILLING_CYCLES",
     "PaymentTransaction",
+    "WebhookEvent",
     "PAYMENT_STATUSES",
     "PAYMENT_METHODS",
     "Notification",

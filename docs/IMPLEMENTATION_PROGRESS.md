@@ -462,3 +462,70 @@
 - [x] **Phase 7.1:** Application Assistance Module (COMPLETED & VERIFIED)
 - [x] **Phase 7.2:** Assisted Service, Subscription & Payment Integration (COMPLETED & VERIFIED)
 - [ ] **Phase 8:** Final Hardening, Integration & Academic Defense Preparation (PENDING USER INITIATION)
+
+
+---
+
+## 4. Phase 7.2 Security Audit & Remediation (SEC-01 to SEC-10)
+
+Following an independent security audit of commit `ac81e1c`, comprehensive technical remediation was executed and verified for all findings **SEC-01 through SEC-10**:
+
+### Remediated Security Findings & Verified Architectural Controls
+
+1. **Client-Side Secret Elimination (`SEC-01`, `SEC-02`):**
+   - Removed all hardcoded test secrets (`devSecret`) and client-side HMAC signature computations from `mobile_app/lib/features/subscription/presentation/screens/subscription_plans_screen.dart`.
+   - Removed `import 'package:crypto/crypto.dart'` from Flutter payment workflows.
+   - Integrated official `razorpay_flutter: ^1.4.7` SDK with a decoupled adapter pattern (`RazorpayCheckoutAdapter`).
+   - `LiveRazorpayAdapter` delegates to native Razorpay checkout on Android/iOS; `MockRazorpayAdapter` provides deterministic test execution for headless CI without platform channel errors.
+   - Mobile client only receives `(paymentId, orderId, signature)` from the gateway callback and forwards them to `POST /api/v1/payments/verify`.
+
+2. **Authoritative Gateway-Side Verification (`SEC-03`):**
+   - In `backend/app/services/payment_service.py` (`verify_and_capture_payment`):
+   - In production mode (`not settings.RAZORPAY_DEV_MODE`), directly queries `GET https://api.razorpay.com/v1/payments/{payment_id}` via `httpx.Client(timeout=10.0)` with HTTP Basic Auth.
+   - Validates that:
+     - Gateway status is strictly `"captured"` (rejecting `"authorized"` or `"failed"`).
+     - Gateway amount matches expected plan price in paise (9,900 for monthly, 79,900 for yearly).
+     - Gateway currency is strictly `"INR"`.
+     - Gateway order ID matches local `tx.razorpay_order_id`.
+
+3. **Webhook Concurrency, Deduplication & Pessimistic Row Locking (`SEC-04`):**
+   - Created dedicated `webhook_events` table tracking `event_id` (unique index), `event_type`, `order_id`, `payment_id`, `status`, `payload_summary`, and receipt timestamp.
+   - In `PaymentService.process_webhook`:
+     - Checks `WebhookEvent.event_id`; immediately returns `idempotent_duplicate` on replay.
+     - Acquires pessimistic exclusive row lock on `PaymentTransaction` using `db.query(PaymentTransaction).with_for_update()`.
+     - Prevents simultaneous webhook deliveries from executing duplicate subscription extensions.
+
+4. **Fair Quota Filtering (`SEC-05`):**
+   - Updated `SubscriptionService.get_quota_status` to count only usable OCR outcomes:
+     `DocumentProcessingStatus.OCR_COMPLETED` and `DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED`.
+   - Explicitly excludes `DocumentProcessingStatus.OCR_FAILED` and pending states, ensuring citizens are never unfairly penalized for failed OCR scans.
+
+5. **Application Assistance Quota Enforcement & LLM Guide Caching (`SEC-06`):**
+   - In `backend/app/api/v1/endpoints/assistance.py`: Enforced `SubscriptionService.enforce_ai_guidance_quota(db=db, user_id=current_user.id)` on `POST /schemes/{scheme_id}/prepare`, returning HTTP 403 Forbidden when quota is exhausted.
+   - Added `application_guide_cache = Column(JSONB, server_default="{}", nullable=False)` to `Scheme` model.
+   - In `AssistanceService.get_scheme_guide`: Serves static general scheme guides directly from PostgreSQL cache, eliminating unauthenticated LLM API consumption.
+
+6. **Full vs. Partial Refund Semantics (`SEC-07`):**
+   - In `PaymentService.process_webhook`:
+     - Handled `refund.processed` and `refund.created` events.
+     - **Full Refund** (`refund_amount >= full_amount`): Sets `payment_status = "refunded"`, revokes active Premium subscription (`status = "refunded"`, `is_active = False`, `end_date = now()`), reverting citizen to Free tier.
+     - **Partial Refund** (`refund_amount < full_amount`): Retains active subscription until natural expiry while logging sanitized audit telemetry in `payment_metadata`.
+
+7. **Production Configuration Model Validation (`SEC-08`):**
+   - In `backend/app/core/config.py`: Added Pydantic `model_validator(mode="after")` to `Settings` that fails startup with explicit error if `ENVIRONMENT == "production"` and `RAZORPAY_DEV_MODE = True` or default test keys are configured.
+
+8. **Safety Ceiling Documentation (`SEC-09`):**
+   - Formalized `PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT = 100` as an approved safety ceiling against LLM exhaustion.
+
+9. **PII Minimization (`SEC-10`):**
+   - Implemented `_mask_string` and `_sanitize_payment_entity` in `payment_service.py`.
+   - Contact numbers, emails, and VPAs in webhook payloads are masked before storage in PostgreSQL.
+
+### Verified Test Results
+
+- **Backend Test Suite:** **125 passed, 1 skipped (live PostgreSQL), 0 failed** across 126 tests:
+  - 17 dedicated tests in `tests/test_payments_and_subscriptions.py` verifying catalog, quotas, exclusions, gateway checks, webhook deduplication, full/partial refunds, PII masking, config validation, and assistance caching.
+- **Flutter Test Suite:** **35 passed, 0 failed** across all test suites:
+  - 11 dedicated tests in `test/subscription_widgets_test.dart` verifying models, `MockRazorpayAdapter` callbacks, and UI flows.
+- **Dart Analysis:** **0 issues found** via `dart analyze lib/features/subscription test/subscription_widgets_test.dart`.
+- **Database Migration:** Migration `c4d5e6f7a8b9_add_webhook_events_and_guide_cache.py` verified via `alembic upgrade head --sql`.

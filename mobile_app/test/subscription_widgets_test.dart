@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:janmitra_assist/features/subscription/models/subscription_models.dart';
+import 'package:janmitra_assist/features/subscription/services/razorpay_checkout_adapter.dart';
 import 'package:janmitra_assist/features/subscription/presentation/screens/payment_failure_screen.dart';
 import 'package:janmitra_assist/features/subscription/presentation/screens/payment_history_screen.dart';
 import 'package:janmitra_assist/features/subscription/presentation/screens/payment_success_screen.dart';
@@ -122,6 +124,79 @@ void main() {
     });
   });
 
+  group('RazorpayCheckoutAdapter Tests', () {
+    test('MockRazorpayAdapter calls onSuccess with deterministic payload', () {
+      final adapter = MockRazorpayAdapter();
+      PaymentSuccessResponse? successRes;
+
+      adapter.init(
+        onSuccess: (res) => successRes = res,
+        onError: (_) {},
+        onExternalWallet: (_) {},
+      );
+
+      adapter.open({
+        'key': 'rzp_test_mock',
+        'order_id': 'order_test_abc123',
+        'amount': 9900,
+      });
+
+      expect(successRes, isNotNull);
+      expect(successRes!.orderId, 'order_test_abc123');
+      expect(successRes!.paymentId, adapter.mockPaymentId);
+      expect(successRes!.signature, adapter.mockSignature);
+
+      adapter.dispose();
+    });
+
+    test('MockRazorpayAdapter calls onError when shouldSucceed is false', () {
+      final adapter = MockRazorpayAdapter()..shouldSucceed = false;
+      PaymentFailureResponse? failureRes;
+
+      adapter.init(
+        onSuccess: (_) {},
+        onError: (res) => failureRes = res,
+        onExternalWallet: (_) {},
+      );
+
+      adapter.open({
+        'key': 'rzp_test_mock',
+        'order_id': 'order_test_fail',
+        'amount': 9900,
+      });
+
+      expect(failureRes, isNotNull);
+      expect(failureRes!.code, Razorpay.PAYMENT_CANCELLED);
+      expect(failureRes!.message, 'Payment was cancelled by citizen');
+
+      adapter.dispose();
+    });
+
+    test('MockRazorpayAdapter calls onExternalWallet when simulateExternalWallet is true', () {
+      final adapter = MockRazorpayAdapter()
+        ..simulateExternalWallet = true
+        ..mockWalletName = 'paytm';
+      ExternalWalletResponse? walletRes;
+
+      adapter.init(
+        onSuccess: (_) {},
+        onError: (_) {},
+        onExternalWallet: (res) => walletRes = res,
+      );
+
+      adapter.open({
+        'key': 'rzp_test_mock',
+        'order_id': 'order_test_wallet',
+        'amount': 9900,
+      });
+
+      expect(walletRes, isNotNull);
+      expect(walletRes!.walletName, 'paytm');
+
+      adapter.dispose();
+    });
+  });
+
   group('Subscription Screens Widget Tests', () {
     testWidgets('SubscriptionPlansScreen renders plans, quotas, and notice',
         (WidgetTester tester) async {
@@ -187,11 +262,14 @@ void main() {
         disclaimer: 'JanMitra is an independent preparation platform.',
       );
 
+      final mockAdapter = MockRazorpayAdapter();
+
       await tester.pumpWidget(
         MaterialApp(
           home: SubscriptionPlansScreen(
             initialPlans: dummyPlans,
             initialSubscription: dummySub,
+            checkoutAdapter: mockAdapter,
           ),
         ),
       );
@@ -251,9 +329,9 @@ void main() {
             aiGuidanceSessionsLimit: 100,
             canAnalyzeDocument: true,
             canRequestGuidance: true,
-            quotaResetDate: DateTime.parse('2026-11-30T23:59:59Z'),
+            quotaResetDate: DateTime.parse('2026-11-01T00:00:00Z'),
           ),
-          disclaimer: 'JanMitra is an independent platform.',
+          disclaimer: 'JanMitra is an independent preparation platform.',
         ),
       );
 
@@ -267,32 +345,32 @@ void main() {
 
       await tester.pumpAndSettle();
 
+      expect(find.text('Payment Confirmed'), findsOneWidget);
       expect(find.text('Welcome to JanMitra Premium!'), findsOneWidget);
-      expect(find.text('MONTHLY'), findsOneWidget);
-      expect(find.text('30 analyses'), findsOneWidget);
-      expect(find.text('100 sessions'), findsOneWidget);
+      expect(find.text('JanMitra Premium ⭐'), findsOneWidget);
       expect(find.text('Start Using Premium Features'), findsOneWidget);
     });
 
-    testWidgets('PaymentFailureScreen renders failure reason and retry button',
+    testWidgets('PaymentFailureScreen renders retry and instructions',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: PaymentFailureScreen(
-            orderId: 'order_failed_99999',
-            errorMessage: 'Payment authorization failed by issuing bank.',
+            errorMessage: 'Payment signature verification failed. Untrusted payment payload rejected.',
+            orderId: 'order_test_failure_123',
           ),
         ),
       );
 
       await tester.pumpAndSettle();
 
+      expect(find.text('Payment Incomplete'), findsOneWidget);
       expect(find.text('Payment Could Not Be Processed'), findsOneWidget);
       expect(
-        find.text('Payment authorization failed by issuing bank.'),
+        find.textContaining('Payment signature verification failed'),
         findsOneWidget,
       );
-      expect(find.text('Order ID: order_failed_99999'), findsOneWidget);
+      expect(find.text('Order ID: order_test_failure_123'), findsOneWidget);
       expect(find.text('Try Again'), findsOneWidget);
       expect(find.text('Go Back'), findsOneWidget);
     });

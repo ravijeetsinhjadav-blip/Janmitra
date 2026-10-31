@@ -264,36 +264,45 @@ class AssistanceService:
         completed_count = sum(1 for item in checklist_items if item.is_completed)
         completion_pct = round((completed_count / total_count) * 100.0, 1) if total_count > 0 else 0.0
 
-        # 6. Retrieve verified RAG knowledge chunks
-        rag_chunks = RAGService.retrieve_relevant_chunks(
-            db=db,
-            scheme_id=scheme_id,
-            query=f"{scheme.scheme_name} application procedure documents submission common mistakes",
-            top_k=3,
-        )
-        rag_dicts = [
-            {
-                "chunk_title": c.chunk_title,
-                "chunk_category": c.chunk_category,
-                "chunk_content": c.chunk_content,
-                "source_title": c.source_title,
-                "source_reference": c.source_reference,
-            }
-            for c in rag_chunks
-        ]
+        # 6. Scheme Guide Resolution with caching (SEC-06)
+        cache = scheme.application_guide_cache or {}
+        if language in cache and isinstance(cache[language], dict):
+            logger.info(f"Serving application guide for scheme {scheme_id} ({language}) from cache")
+            guide_dict = cache[language]
+        else:
+            logger.info(f"Generating and caching application guide for scheme {scheme_id} ({language})")
+            rag_chunks = RAGService.retrieve_relevant_chunks(
+                db=db,
+                scheme_id=scheme_id,
+                query=f"{scheme.scheme_name} application procedure documents submission common mistakes",
+                top_k=3,
+            )
+            rag_dicts = [
+                {
+                    "chunk_title": c.chunk_title,
+                    "chunk_category": c.chunk_category,
+                    "chunk_content": c.chunk_content,
+                    "source_title": c.source_title,
+                    "source_reference": c.source_reference,
+                }
+                for c in rag_chunks
+            ]
 
-        # 7. Generate Scheme Information Guide via LLM Provider
-        llm_adapter = get_llm_adapter()
-        guide_dict = llm_adapter.generate_application_guide(
-            scheme_name=scheme.scheme_name,
-            category=scheme.category,
-            department=scheme.department,
-            required_documents=scheme.required_documents or [],
-            required_profile_fields=scheme.required_profile_fields or [],
-            application_process=scheme.application_process or [],
-            rag_chunks=rag_dicts,
-            language=language,
-        )
+            llm_adapter = get_llm_adapter()
+            guide_dict = llm_adapter.generate_application_guide(
+                scheme_name=scheme.scheme_name,
+                category=scheme.category,
+                department=scheme.department,
+                required_documents=scheme.required_documents or [],
+                required_profile_fields=scheme.required_profile_fields or [],
+                application_process=scheme.application_process or [],
+                rag_chunks=rag_dicts,
+                language=language,
+            )
+            new_cache = dict(cache)
+            new_cache[language] = guide_dict
+            scheme.application_guide_cache = new_cache
+            db.commit()
 
         guide_obj = ApplicationInfoGuide(
             applicant_info_required=[
@@ -319,7 +328,7 @@ class AssistanceService:
             ),
         )
 
-        # 8. Persist updated assistance snapshot into assessment record
+        # 7. Persist updated assistance snapshot into assessment record
         updated_res_data = dict(res_data)
         updated_res_data["assistance_data"] = {
             "checklist_total_count": total_count,
@@ -412,7 +421,7 @@ class AssistanceService:
         scheme_id: UUID,
         language: str = "en",
     ) -> ApplicationInfoGuide:
-        """Retrieve verified public application guide for a scheme without requiring prior citizen assessment."""
+        """Retrieve verified public application guide for a scheme with database caching (SEC-06)."""
         scheme = db.query(Scheme).filter(Scheme.id == scheme_id).first()
         if not scheme:
             raise HTTPException(
@@ -420,34 +429,45 @@ class AssistanceService:
                 detail="Scheme not found.",
             )
 
-        rag_chunks = RAGService.retrieve_relevant_chunks(
-            db=db,
-            scheme_id=scheme_id,
-            query=f"{scheme.scheme_name} application procedure documents instructions",
-            top_k=3,
-        )
-        rag_dicts = [
-            {
-                "chunk_title": c.chunk_title,
-                "chunk_category": c.chunk_category,
-                "chunk_content": c.chunk_content,
-                "source_title": c.source_title,
-                "source_reference": c.source_reference,
-            }
-            for c in rag_chunks
-        ]
+        # Check guide cache on scheme (SEC-06)
+        cache = scheme.application_guide_cache or {}
+        if language in cache and isinstance(cache[language], dict):
+            logger.info(f"Serving public guide for scheme {scheme_id} ({language}) from cache")
+            guide_dict = cache[language]
+        else:
+            logger.info(f"Generating and caching public guide for scheme {scheme_id} ({language})")
+            rag_chunks = RAGService.retrieve_relevant_chunks(
+                db=db,
+                scheme_id=scheme_id,
+                query=f"{scheme.scheme_name} application procedure documents instructions",
+                top_k=3,
+            )
+            rag_dicts = [
+                {
+                    "chunk_title": c.chunk_title,
+                    "chunk_category": c.chunk_category,
+                    "chunk_content": c.chunk_content,
+                    "source_title": c.source_title,
+                    "source_reference": c.source_reference,
+                }
+                for c in rag_chunks
+            ]
 
-        llm_adapter = get_llm_adapter()
-        guide_dict = llm_adapter.generate_application_guide(
-            scheme_name=scheme.scheme_name,
-            category=scheme.category,
-            department=scheme.department,
-            required_documents=scheme.required_documents or [],
-            required_profile_fields=scheme.required_profile_fields or [],
-            application_process=scheme.application_process or [],
-            rag_chunks=rag_dicts,
-            language=language,
-        )
+            llm_adapter = get_llm_adapter()
+            guide_dict = llm_adapter.generate_application_guide(
+                scheme_name=scheme.scheme_name,
+                category=scheme.category,
+                department=scheme.department,
+                required_documents=scheme.required_documents or [],
+                required_profile_fields=scheme.required_profile_fields or [],
+                application_process=scheme.application_process or [],
+                rag_chunks=rag_dicts,
+                language=language,
+            )
+            new_cache = dict(cache)
+            new_cache[language] = guide_dict
+            scheme.application_guide_cache = new_cache
+            db.commit()
 
         return ApplicationInfoGuide(
             applicant_info_required=[

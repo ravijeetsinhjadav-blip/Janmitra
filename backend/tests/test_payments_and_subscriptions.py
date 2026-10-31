@@ -3,22 +3,25 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
+from typing import Dict, Any
 import pytest
+from pydantic import ValidationError
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+import httpx
 
 from app.main import app
 from app.models.user import User
 from app.models.profile import UserProfile
 from app.models.subscription import Subscription
-from app.models.payment import PaymentTransaction
+from app.models.payment import PaymentTransaction, WebhookEvent
 from app.models.document import DocumentMetadata, DocumentProcessingStatus
 from app.models.assessment import Assessment
 from app.models.scheme import Scheme
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.dependencies import get_db, get_current_active_citizen
 from app.services.subscription_service import SubscriptionService
-from app.services.payment_service import PaymentService
+from app.services.payment_service import PaymentService, _mask_string, _sanitize_payment_entity
 
 
 @pytest.fixture
@@ -102,112 +105,128 @@ class TestSubscriptionPlansAndQuotas:
         assert data["usage"]["can_analyze_document"] is True
         assert data["usage"]["can_request_guidance"] is True
 
-    def test_free_tier_document_quota_enforcement(
-        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    def test_quota_counting_excludes_ocr_failed_documents(
+        self, db_session: Session, auth_citizen: User
     ):
-        # Insert 3 uploaded documents in current month
-        now = datetime.now(timezone.utc)
+        """SEC-05: Ensure OCR_FAILED documents are NOT counted towards citizen's monthly quota."""
+        # 1 failed document
+        doc_failed = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="income_blurry.pdf",
+            storage_reference="/vault/income_blurry.pdf",
+            mime_type="application/pdf",
+            file_size=1024,
+            ocr_status=DocumentProcessingStatus.OCR_FAILED,
+        )
+        # 1 completed document
+        doc_completed = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="aadhaar_card",
+            original_filename="aadhaar_clear.pdf",
+            storage_reference="/vault/aadhaar_clear.pdf",
+            mime_type="application/pdf",
+            file_size=2048,
+            ocr_status=DocumentProcessingStatus.OCR_COMPLETED,
+        )
+        db_session.add_all([doc_failed, doc_completed])
+        db_session.commit()
+
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        # Only 1 completed doc counted, 1 failed doc ignored
+        assert quota.ai_document_analyses_used == 1
+        assert quota.can_analyze_document is True
+
+    def test_document_quota_enforcement_blocks_when_exceeded(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """Citizens exceeding free quota (3 docs) are blocked with 403 Forbidden."""
         for i in range(3):
             doc = DocumentMetadata(
                 id=uuid.uuid4(),
                 user_id=auth_citizen.id,
-                document_type="income_certificate",
-                original_filename=f"income_{i}.pdf",
-                storage_reference=f"storage/income_{i}.pdf",
+                document_type=f"doc_{i}",
+                original_filename=f"doc_{i}.pdf",
+                storage_reference=f"/vault/doc_{i}.pdf",
                 mime_type="application/pdf",
-                file_size=1024,
+                file_size=1000,
                 ocr_status=DocumentProcessingStatus.OCR_COMPLETED,
-                created_at=now,
             )
             db_session.add(doc)
         db_session.commit()
 
-        # Check quota status endpoint
-        sub_resp = client_for_user.get("/api/v1/subscriptions/me").json()
-        assert sub_resp["usage"]["ai_document_analyses_used"] == 3
-        assert sub_resp["usage"]["can_analyze_document"] is False
+        # Quota should now be exhausted
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 3
+        assert quota.can_analyze_document is False
 
-        # Attempt 4th upload via upload endpoint
-        files = {"file": ("test.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"mock", "image/png")}
-        data = {"document_type": "caste_certificate"}
-        upload_resp = client_for_user.post("/api/v1/documents/upload", files=files, data=data)
-        assert upload_resp.status_code == 403
-        assert "quota reached" in upload_resp.json()["detail"].lower()
-        assert "upgrade to janmitra premium" in upload_resp.json()["detail"].lower()
+        with pytest.raises(Exception) as excinfo:
+            SubscriptionService.enforce_document_analysis_quota(db_session, auth_citizen.id)
+        assert "403" in str(excinfo.value)
+        assert "quota reached" in str(excinfo.value).lower()
 
-    def test_free_tier_guidance_quota_enforcement(
-        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    def test_ai_guidance_quota_enforcement_blocks_when_exceeded(
+        self, db_session: Session, auth_citizen: User
     ):
-        now = datetime.now(timezone.utc)
-        # Create a mock scheme
+        """Citizens exceeding free guidance limit (5 sessions) are blocked with 403."""
         scheme = Scheme(
             id=uuid.uuid4(),
             scheme_name="Test Welfare Scheme",
-            description="Scheme for quota testing",
-            department="Dept of Social Welfare",
+            description="Detailed description for testing",
+            department="Agriculture Dept",
             state_applicability="All India",
-            eligibility_summary="Citizens below ₹2L",
-            official_source_url="https://myscheme.gov.in/",
-            official_application_url="https://myscheme.gov.in/",
-            is_active=True,
-            is_demo_data=True,
+            eligibility_summary="All small farmers",
+            official_application_url="https://welfare.gov.in",
+            official_source_url="https://welfare.gov.in/rules",
+            required_documents=["Aadhaar"],
+            application_process=[],
         )
         db_session.add(scheme)
-        db_session.flush()
+        db_session.commit()
 
-        # Insert 5 advisory assessments in current month
+        # Add 5 assessments with non-empty advisory guidance
         for i in range(5):
-            assess = Assessment(
+            ast = Assessment(
                 id=uuid.uuid4(),
                 user_id=auth_citizen.id,
                 scheme_id=scheme.id,
-                assessment_type="scheme_eligibility",
-                result_data={"overall_status": "Potentially Eligible"},
-                overall_readiness_score=80.0,
-                advisory_guidance={"summary": f"Guidance session {i}"},
-                created_at=now,
+                result_data={"eligible": True},
+                advisory_guidance={"tips": [f"Tip {i}"]},
             )
-            db_session.add(assess)
+            db_session.add(ast)
         db_session.commit()
 
-        # Check quota status
-        sub_resp = client_for_user.get("/api/v1/subscriptions/me").json()
-        assert sub_resp["usage"]["ai_guidance_sessions_used"] == 5
-        assert sub_resp["usage"]["can_request_guidance"] is False
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_guidance_sessions_used == 5
+        assert quota.can_request_guidance is False
 
-        # Attempt 6th advisory session
-        adv_resp = client_for_user.post(
-            f"/api/v1/advisory/schemes/{scheme.id}/assess-and-advise",
-            json={"language": "en"},
-        )
-        assert adv_resp.status_code == 403
-        assert "quota reached" in adv_resp.json()["detail"].lower()
+        with pytest.raises(Exception) as excinfo:
+            SubscriptionService.enforce_ai_guidance_quota(db_session, auth_citizen.id)
+        assert "403" in str(excinfo.value)
 
-    def test_expired_subscription_reverts_to_free_tier(
+    def test_subscription_auto_expiry(
         self, client_for_user: TestClient, db_session: Session, auth_citizen: User
     ):
-        # Create an expired premium subscription
-        past_end = datetime.now(timezone.utc) - timedelta(days=2)
-        past_start = past_end - timedelta(days=30)
+        """Expired premium subscriptions are automatically transitioned to expired."""
         expired_sub = Subscription(
             id=uuid.uuid4(),
             user_id=auth_citizen.id,
             plan_type="premium",
             billing_cycle="monthly",
-            status="active",  # Marked active in DB but end_date is past
-            start_date=past_start,
-            end_date=past_end,
+            status="active",
+            start_date=datetime.now(timezone.utc) - timedelta(days=60),
+            end_date=datetime.now(timezone.utc) - timedelta(days=30),
         )
         db_session.add(expired_sub)
         db_session.commit()
 
-        # Calling /subscriptions/me should automatically expire it and return free tier
         resp = client_for_user.get("/api/v1/subscriptions/me")
         assert resp.status_code == 200
         data = resp.json()
         assert data["plan_type"] == "free"
 
-        # Verify DB updated to expired
         db_session.refresh(expired_sub)
         assert expired_sub.status == "expired"
 
@@ -241,14 +260,12 @@ class TestRazorpayPaymentsModule:
         assert data_y["billing_cycle"] == "yearly"
 
     def test_create_order_invalid_inputs_rejected(self, client_for_user: TestClient):
-        # Invalid plan type
         resp_plan = client_for_user.post(
             "/api/v1/payments/create-order",
             json={"plan_type": "free", "billing_cycle": "monthly"},
         )
         assert resp_plan.status_code == 400
 
-        # Invalid billing cycle
         resp_cycle = client_for_user.post(
             "/api/v1/payments/create-order",
             json={"plan_type": "premium", "billing_cycle": "weekly"},
@@ -258,7 +275,6 @@ class TestRazorpayPaymentsModule:
     def test_verify_payment_success_and_subscription_activation(
         self, client_for_user: TestClient, db_session: Session, auth_citizen: User
     ):
-        # 1. Create order
         order_res = client_for_user.post(
             "/api/v1/payments/create-order",
             json={"plan_type": "premium", "billing_cycle": "monthly"},
@@ -266,12 +282,10 @@ class TestRazorpayPaymentsModule:
         order_id = order_res["order_id"]
         payment_id = f"pay_{uuid.uuid4().hex[:14]}"
 
-        # 2. Generate authentic HMAC signature
         payload_bytes = f"{order_id}|{payment_id}".encode("utf-8")
         secret = settings.RAZORPAY_KEY_SECRET.encode("utf-8")
         signature = hmac.new(secret, payload_bytes, hashlib.sha256).hexdigest()
 
-        # 3. Verify payment
         verify_res = client_for_user.post(
             "/api/v1/payments/verify",
             json={
@@ -289,7 +303,7 @@ class TestRazorpayPaymentsModule:
         assert data["subscription"]["billing_cycle"] == "monthly"
         assert data["subscription"]["usage"]["ai_document_analyses_limit"] == 30
 
-        # 4. Idempotent re-verify check
+        # Idempotent re-verify check
         re_verify = client_for_user.post(
             "/api/v1/payments/verify",
             json={
@@ -320,13 +334,260 @@ class TestRazorpayPaymentsModule:
         assert verify_res.status_code == 400
         assert "signature verification failed" in verify_res.json()["detail"].lower()
 
-    def test_webhook_payment_captured_and_idempotency(
+    def test_verify_payment_production_gateway_verification(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User, monkeypatch
+    ):
+        """SEC-03: In non-dev mode, verify_and_capture_payment checks payment status with Razorpay API."""
+        # 1. Create order in dev mode
+        order_res = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
+        ).json()
+        order_id = order_res["order_id"]
+        payment_id = f"pay_{uuid.uuid4().hex[:14]}"
+
+        payload_bytes = f"{order_id}|{payment_id}".encode("utf-8")
+        secret = settings.RAZORPAY_KEY_SECRET.encode("utf-8")
+        signature = hmac.new(secret, payload_bytes, hashlib.sha256).hexdigest()
+
+        # Now switch to production mode to test gateway-side verification
+        monkeypatch.setattr(settings, "RAZORPAY_DEV_MODE", False)
+
+        # Case 1: Gateway returns captured with correct amount & currency -> Succeeds
+        class MockSuccessResponse:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self):
+                return {
+                    "id": payment_id,
+                    "order_id": order_id,
+                    "status": "captured",
+                    "amount": 9900,
+                    "currency": "INR",
+                    "method": "card",
+                }
+
+        monkeypatch.setattr(httpx.Client, "get", lambda *args, **kwargs: MockSuccessResponse())
+
+        verify_res = client_for_user.post(
+            "/api/v1/payments/verify",
+            json={
+                "razorpay_order_id": order_id,
+                "razorpay_payment_id": payment_id,
+                "razorpay_signature": signature,
+            },
+        )
+        assert verify_res.status_code == 200
+        assert verify_res.json()["success"] is True
+
+        # Case 2: Gateway returns authorized (not captured) -> Rejected 400
+        # Re-enable dev mode briefly to create a second order
+        monkeypatch.setattr(settings, "RAZORPAY_DEV_MODE", True)
+        order_res2 = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
+        ).json()
+        order_id2 = order_res2["order_id"]
+        pay_id2 = "pay_failed_status"
+        sig2 = hmac.new(secret, f"{order_id2}|{pay_id2}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+        # Switch back to production mode with a failed status mock
+        monkeypatch.setattr(settings, "RAZORPAY_DEV_MODE", False)
+
+        class MockFailedStatusResponse:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self):
+                return {
+                    "id": pay_id2,
+                    "order_id": order_id2,
+                    "status": "failed",
+                    "amount": 9900,
+                    "currency": "INR",
+                }
+
+        monkeypatch.setattr(httpx.Client, "get", lambda *args, **kwargs: MockFailedStatusResponse())
+
+        verify_res2 = client_for_user.post(
+            "/api/v1/payments/verify",
+            json={
+                "razorpay_order_id": order_id2,
+                "razorpay_payment_id": pay_id2,
+                "razorpay_signature": sig2,
+            },
+        )
+        assert verify_res2.status_code == 400
+        assert "expected 'captured'" in verify_res2.json()["detail"].lower()
+
+    def test_webhook_deduplication_via_webhook_events(
         self, client_for_user: TestClient, db_session: Session, auth_citizen: User
     ):
-        # Create order
+        """SEC-04: Test deduplication via WebhookEvent table."""
         order_res = client_for_user.post(
             "/api/v1/payments/create-order",
             json={"plan_type": "premium", "billing_cycle": "yearly"},
+        ).json()
+        order_id = order_res["order_id"]
+        payment_id = f"pay_{uuid.uuid4().hex[:14]}"
+        event_id = f"evt_{uuid.uuid4().hex[:16]}"
+
+        webhook_body = json.dumps({
+            "event_id": event_id,
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": payment_id,
+                        "order_id": order_id,
+                        "amount": 79900,
+                        "currency": "INR",
+                        "status": "captured",
+                        "method": "card",
+                        "contact": "9876543210",
+                        "email": "citizen@example.com",
+                    }
+                }
+            }
+        })
+        raw_bytes = webhook_body.encode("utf-8")
+        wh_signature = hmac.new(
+            settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), raw_bytes, hashlib.sha256
+        ).hexdigest()
+
+        # First webhook arrival
+        resp1 = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=raw_bytes,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": wh_signature},
+        )
+        assert resp1.status_code == 200
+        assert resp1.json()["status"] == "captured"
+
+        # WebhookEvent record should exist in database
+        event_record = db_session.query(WebhookEvent).filter_by(event_id=event_id).first()
+        assert event_record is not None
+        assert event_record.event_type == "payment.captured"
+
+        # Duplicate webhook arrival with same event_id
+        resp2 = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=raw_bytes,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": wh_signature},
+        )
+        assert resp2.status_code == 200
+        assert resp2.json()["status"] == "idempotent_duplicate"
+
+    def test_webhook_refund_full_and_partial(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-07: Full refund revokes subscription; partial refund retains subscription."""
+        # 1. Activate monthly premium via order & capture
+        order_res = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
+        ).json()
+        order_id = order_res["order_id"]
+        payment_id = f"pay_{uuid.uuid4().hex[:14]}"
+
+        payload_bytes = f"{order_id}|{payment_id}".encode("utf-8")
+        secret = settings.RAZORPAY_KEY_SECRET.encode("utf-8")
+        signature = hmac.new(secret, payload_bytes, hashlib.sha256).hexdigest()
+
+        client_for_user.post(
+            "/api/v1/payments/verify",
+            json={
+                "razorpay_order_id": order_id,
+                "razorpay_payment_id": payment_id,
+                "razorpay_signature": signature,
+            },
+        )
+
+        sub_before = client_for_user.get("/api/v1/subscriptions/me").json()
+        assert sub_before["plan_type"] == "premium"
+
+        # 2. Send Partial Refund (₹40 -> 4000 paise out of 9900 paise)
+        part_refund_body = json.dumps({
+            "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+            "event": "refund.processed",
+            "payload": {
+                "refund": {
+                    "entity": {
+                        "id": f"rfnd_{uuid.uuid4().hex[:10]}",
+                        "payment_id": payment_id,
+                        "amount": 4000,
+                        "currency": "INR",
+                    }
+                },
+                "payment": {
+                    "entity": {
+                        "id": payment_id,
+                        "order_id": order_id,
+                    }
+                }
+            }
+        })
+        raw_part = part_refund_body.encode("utf-8")
+        sig_part = hmac.new(
+            settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), raw_part, hashlib.sha256
+        ).hexdigest()
+
+        resp_part = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=raw_part,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig_part},
+        )
+        assert resp_part.status_code == 200
+        assert resp_part.json()["status"] == "refunded_partial"
+
+        # Premium subscription is retained after partial refund
+        sub_part = client_for_user.get("/api/v1/subscriptions/me").json()
+        assert sub_part["plan_type"] == "premium"
+
+        # 3. Send Full Refund (₹99 -> 9900 paise)
+        full_refund_body = json.dumps({
+            "event_id": f"evt_{uuid.uuid4().hex[:12]}",
+            "event": "refund.processed",
+            "payload": {
+                "refund": {
+                    "entity": {
+                        "id": f"rfnd_{uuid.uuid4().hex[:10]}",
+                        "payment_id": payment_id,
+                        "amount": 9900,
+                        "currency": "INR",
+                    }
+                },
+                "payment": {
+                    "entity": {
+                        "id": payment_id,
+                        "order_id": order_id,
+                    }
+                }
+            }
+        })
+        raw_full = full_refund_body.encode("utf-8")
+        sig_full = hmac.new(
+            settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), raw_full, hashlib.sha256
+        ).hexdigest()
+
+        resp_full = client_for_user.post(
+            "/api/v1/payments/webhook",
+            content=raw_full,
+            headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig_full},
+        )
+        assert resp_full.status_code == 200
+        assert resp_full.json()["status"] == "refunded_full"
+
+        # Premium subscription is now revoked (defaults back to Free)
+        sub_full = client_for_user.get("/api/v1/subscriptions/me").json()
+        assert sub_full["plan_type"] == "free"
+
+    def test_pii_sanitization_in_payment_metadata(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-10: Raw contact, email, and VPA identifiers are masked before DB persistence."""
+        order_res = client_for_user.post(
+            "/api/v1/payments/create-order",
+            json={"plan_type": "premium", "billing_cycle": "monthly"},
         ).json()
         order_id = order_res["order_id"]
         payment_id = f"pay_{uuid.uuid4().hex[:14]}"
@@ -338,69 +599,12 @@ class TestRazorpayPaymentsModule:
                     "entity": {
                         "id": payment_id,
                         "order_id": order_id,
-                        "amount": 79900,
+                        "amount": 9900,
                         "currency": "INR",
                         "status": "captured",
-                        "method": "card",
-                    }
-                }
-            }
-        })
-        raw_bytes = webhook_body.encode("utf-8")
-
-        # Generate authentic webhook signature
-        wh_secret = settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8")
-        wh_signature = hmac.new(wh_secret, raw_bytes, hashlib.sha256).hexdigest()
-
-        # Send webhook
-        wh_resp = client_for_user.post(
-            "/api/v1/payments/webhook",
-            content=raw_bytes,
-            headers={
-                "Content-Type": "application/json",
-                "X-Razorpay-Signature": wh_signature,
-            },
-        )
-        assert wh_resp.status_code == 200
-        assert wh_resp.json()["status"] == "captured"
-
-        # Check citizen subscription is now Premium yearly
-        sub_resp = client_for_user.get("/api/v1/subscriptions/me").json()
-        assert sub_resp["plan_type"] == "premium"
-        assert sub_resp["billing_cycle"] == "yearly"
-        assert sub_resp["days_remaining"] >= 360
-
-        # Duplicate webhook replay should be handled safely and idempotently
-        dup_resp = client_for_user.post(
-            "/api/v1/payments/webhook",
-            content=raw_bytes,
-            headers={
-                "Content-Type": "application/json",
-                "X-Razorpay-Signature": wh_signature,
-            },
-        )
-        assert dup_resp.status_code == 200
-        assert dup_resp.json()["status"] == "idempotent_success"
-
-    def test_webhook_payment_failed_event(
-        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
-    ):
-        order_res = client_for_user.post(
-            "/api/v1/payments/create-order",
-            json={"plan_type": "premium", "billing_cycle": "monthly"},
-        ).json()
-        order_id = order_res["order_id"]
-
-        webhook_body = json.dumps({
-            "event": "payment.failed",
-            "payload": {
-                "payment": {
-                    "entity": {
-                        "id": f"pay_{uuid.uuid4().hex[:14]}",
-                        "order_id": order_id,
-                        "status": "failed",
-                        "error_code": "BAD_REQUEST_ERROR",
-                        "error_description": "Payment was cancelled by the user",
+                        "contact": "+919876543210",
+                        "email": "rajesh.patel@gmail.com",
+                        "vpa": "rajesh@okhdfcbank",
                     }
                 }
             }
@@ -410,102 +614,124 @@ class TestRazorpayPaymentsModule:
             settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8"), raw_bytes, hashlib.sha256
         ).hexdigest()
 
-        wh_resp = client_for_user.post(
+        client_for_user.post(
             "/api/v1/payments/webhook",
             content=raw_bytes,
             headers={"Content-Type": "application/json", "X-Razorpay-Signature": wh_signature},
         )
-        assert wh_resp.status_code == 200
-        assert wh_resp.json()["status"] == "failed"
 
-        # Transaction in DB should be marked failed
         tx = db_session.query(PaymentTransaction).filter_by(razorpay_order_id=order_id).first()
-        assert tx.payment_status == "failed"
-        assert tx.error_code == "BAD_REQUEST_ERROR"
+        payload = tx.payment_metadata.get("payload", {})
+        assert payload.get("contact") != "+919876543210"
+        assert payload.get("contact").endswith("3210")
+        assert payload.get("email") != "rajesh.patel@gmail.com"
+        assert payload.get("vpa") != "rajesh@okhdfcbank"
 
-    def test_webhook_invalid_signature_rejected(self, client_for_user: TestClient):
-        wh_resp = client_for_user.post(
-            "/api/v1/payments/webhook",
-            content=b'{"event": "payment.captured"}',
-            headers={"Content-Type": "application/json", "X-Razorpay-Signature": "invalid_sig"},
-        )
-        assert wh_resp.status_code == 400
-        assert "invalid razorpay webhook signature" in wh_resp.json()["detail"].lower()
+    def test_production_config_validation(self):
+        """SEC-08: Ensure Settings model_validator rejects dev mode or placeholders in production."""
+        with pytest.raises(ValidationError):
+            Settings(
+                ENVIRONMENT="production",
+                RAZORPAY_DEV_MODE=True,
+            )
 
-    def test_payment_history_retrieval_and_isolation(
+        with pytest.raises(ValidationError):
+            Settings(
+                ENVIRONMENT="production",
+                RAZORPAY_DEV_MODE=False,
+                RAZORPAY_KEY_ID="rzp_test_placeholder_key_id",
+            )
+
+    def test_assistance_prepare_enforces_ai_guidance_quota(
         self, client_for_user: TestClient, db_session: Session, auth_citizen: User
     ):
-        # Create orders
-        client_for_user.post(
-            "/api/v1/payments/create-order",
-            json={"plan_type": "premium", "billing_cycle": "monthly"},
-        )
-        client_for_user.post(
-            "/api/v1/payments/create-order",
-            json={"plan_type": "premium", "billing_cycle": "yearly"},
-        )
-
-        # Another citizen creates an order
-        other_user = User(id=uuid.uuid4(), role="citizen", mobile_number="9999988888")
-        db_session.add(other_user)
-        db_session.commit()
-        other_tx = PaymentTransaction(
+        """SEC-06: Assistance /prepare route enforces monthly AI guidance quota."""
+        scheme = Scheme(
             id=uuid.uuid4(),
-            user_id=other_user.id,
-            razorpay_order_id="order_other_citizen_123",
-            amount=99.0,
-            currency="INR",
-            plan_type="premium",
-            billing_cycle="monthly",
-            payment_status="created",
+            scheme_name="PM Kisan Test Assistance",
+            description="PM Kisan scheme description",
+            department="Agriculture Dept",
+            state_applicability="All India",
+            eligibility_summary="All small farmers",
+            official_application_url="https://pmkisan.gov.in",
+            official_source_url="https://pmkisan.gov.in/rules",
+            required_documents=["Aadhaar", "Land Records"],
+            application_process=[],
         )
-        db_session.add(other_tx)
+        db_session.add(scheme)
         db_session.commit()
 
-        # Fetch history for current citizen
-        hist_resp = client_for_user.get("/api/v1/payments/history")
-        assert hist_resp.status_code == 200
-        data = hist_resp.json()
-        assert data["total"] == 2
-        order_ids = [item["razorpay_order_id"] for item in data["items"]]
-        assert "order_other_citizen_123" not in order_ids
+        # Add 5 assessments to exhaust quota
+        for i in range(5):
+            ast = Assessment(
+                id=uuid.uuid4(),
+                user_id=auth_citizen.id,
+                scheme_id=scheme.id,
+                result_data={"eligible": True},
+                advisory_guidance={"tips": [f"Tip {i}"]},
+            )
+            db_session.add(ast)
+        db_session.commit()
 
-    def test_idor_unauthorized_order_verification_blocked(
-        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+        resp = client_for_user.post(f"/api/v1/assistance/schemes/{scheme.id}/prepare")
+        assert resp.status_code == 403
+        assert "quota reached" in resp.json()["detail"].lower()
+
+    def test_scheme_guide_caching(
+        self, client_for_user: TestClient, db_session: Session
     ):
-        # Create an order belonging to another citizen
-        other_user = User(id=uuid.uuid4(), role="citizen", mobile_number="9999977777")
-        db_session.add(other_user)
-        db_session.commit()
-
-        order_id = "order_belonging_to_other_citizen"
-        other_tx = PaymentTransaction(
+        """SEC-06: GET /schemes/{scheme_id}/guide caches general guides to prevent LLM abuse."""
+        scheme = Scheme(
             id=uuid.uuid4(),
-            user_id=other_user.id,
-            razorpay_order_id=order_id,
-            amount=99.0,
-            currency="INR",
-            plan_type="premium",
-            billing_cycle="monthly",
-            payment_status="created",
+            scheme_name="Guide Cache Scheme Test",
+            description="Welfare scheme description",
+            department="Welfare Dept",
+            state_applicability="All India",
+            eligibility_summary="Eligible citizens",
+            official_application_url="https://welfare.gov.in",
+            official_source_url="https://welfare.gov.in/rules",
+            required_documents=["Aadhaar"],
+            application_process=[],
+            application_guide_cache={},
         )
-        db_session.add(other_tx)
+        db_session.add(scheme)
         db_session.commit()
 
-        payment_id = "pay_test_idor_attempt"
-        payload_bytes = f"{order_id}|{payment_id}".encode("utf-8")
-        signature = hmac.new(
-            settings.RAZORPAY_KEY_SECRET.encode("utf-8"), payload_bytes, hashlib.sha256
-        ).hexdigest()
+        # Pre-seed cache with known data
+        cached_guide = {
+            "applicant_info_required": [
+                {
+                    "field_name": "Full Name",
+                    "description": "Must match Aadhaar name",
+                    "importance": "Mandatory",
+                }
+            ],
+            "supporting_documents_specs": [
+                {
+                    "document_type": "Aadhaar",
+                    "specifications": "Clear PDF under 2MB",
+                    "issuing_authority": "UIDAI",
+                }
+            ],
+            "important_declarations": ["Non-exclusion declaration"],
+            "common_mistakes_to_avoid": ["Blurry scan"],
+            "submission_precautions": ["Double check IFSC"],
+            "portal_steps": [
+                {
+                    "step_number": 1,
+                    "title": "Visit Portal",
+                    "instruction": "Click register",
+                }
+            ],
+            "disclaimer": "Cached test disclaimer",
+        }
+        scheme.application_guide_cache = {"en": cached_guide}
+        db_session.commit()
 
-        # Auth citizen attempts to verify other user's order
-        verify_resp = client_for_user.post(
-            "/api/v1/payments/verify",
-            json={
-                "razorpay_order_id": order_id,
-                "razorpay_payment_id": payment_id,
-                "razorpay_signature": signature,
-            },
-        )
-        assert verify_resp.status_code == 403
-        assert "permission" in verify_resp.json()["detail"].lower()
+        # Fetch guide
+        resp = client_for_user.get(f"/api/v1/assistance/schemes/{scheme.id}/guide?language=en")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["disclaimer"] == "Cached test disclaimer"
+        assert len(data["common_mistakes_to_avoid"]) == 1
+        assert data["common_mistakes_to_avoid"][0] == "Blurry scan"

@@ -130,3 +130,63 @@ class PaymentTransaction(Base):
 
     def __repr__(self) -> str:
         return f"<PaymentTransaction id={self.id} order={self.razorpay_order_id} status='{self.payment_status}'>"
+
+
+class WebhookEvent(Base):
+    """Auditing and idempotency tracking table for Razorpay webhooks."""
+    __tablename__ = "webhook_events"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+        comment="Primary UUID key for webhook event",
+    )
+    event_id = Column(
+        String(100),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="Unique Razorpay event ID (e.g. event_xxx)",
+    )
+    event_type = Column(
+        String(100),
+        nullable=False,
+        index=True,
+        comment="Event type: payment.captured, payment.failed, refund.processed, etc.",
+    )
+    order_id = Column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Associated Razorpay order ID",
+    )
+    payment_id = Column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Associated Razorpay payment ID",
+    )
+    status = Column(
+        String(50),
+        nullable=False,
+        default="processed",
+        comment="Processing status: processed, ignored, failed",
+    )
+    payload_summary = Column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Sanitized webhook payload summary without raw PII",
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        comment="Event receipt timestamp",
+    )
+
+    def __repr__(self) -> str:
+        return f"<WebhookEvent id={self.id} event_id={self.event_id} type='{self.event_type}'>"
