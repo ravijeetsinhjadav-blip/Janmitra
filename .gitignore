@@ -28,12 +28,15 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Flutter / Dart
+flutter/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
 mobile_app/build/
 mobile_app/.dart_tool/
+mobile_app/android/.gradle/
+mobile_app/android/local.properties
 *.apk
 *.aab
 *.ipa

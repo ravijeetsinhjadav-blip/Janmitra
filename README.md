@@ -17,7 +17,7 @@
 - **Preparing application readiness reports and checklists**.
 - **Accessing official government application portals** directly to complete official submissions.
 
-> **Important Note:** JanMitra Assist **does not replace official government portals**. Citizens submit and finalize their applications on official government websites or through designated state/central touchpoints.
+> **Important Note:** JanMitra Assist **does not replace official government portals**. Citizens submit and finalize their applications on official government websites or through designated state/central touchpoints. Assessment results and readiness scores are strictly advisory evaluations.
 
 ---
 
@@ -28,9 +28,12 @@
 | **Mobile App** | **Flutter (Dart)** | Citizen-facing mobile client (Android target) |
 | **Backend** | **Python FastAPI** | High-performance asynchronous REST API |
 | **Database** | **PostgreSQL** | Relational data store for schemes, users, and audit logs |
+| **ORM** | **SQLAlchemy 2.x** | Object Relational Mapping with declarative models |
+| **PostgreSQL Driver** | **Psycopg 3 (`psycopg[binary]`)** | Modern PostgreSQL driver for Python |
+| **Database Migrations** | **Alembic** | Schema versioning and migration management |
 | **Admin Dashboard** | **React.js (Vite)** | Administrator portal for schemes & configuration |
-| **OCR Engine** | **Local Tesseract OCR** | Privacy-first local document text extraction |
-| **AI Model Runtime** | **Ollama (Llama 3.2 1B)** | Local lightweight LLM for eligibility guidance |
+| **OCR Engine** | **Local Tesseract OCR** | Privacy-first local document text extraction (Phase 3) |
+| **AI Model Runtime** | **Ollama (Llama 3.2 1B)** | Local lightweight LLM for eligibility guidance (Phase 4) |
 | **Push Notifications**| **Firebase Cloud Messaging** | Scheme alerts and status notifications |
 | **Payment Gateway** | **Razorpay Test Mode** | Optional document readiness report checkout |
 | **Version Control** | **Git** | Source code management across monorepo |
@@ -41,20 +44,47 @@
 
 ```
 Janmitra/
-├── .gitignore                    # Monorepo ignore rules (Python, Node, Flutter)
+├── .gitignore                    # Monorepo ignore rules (Python, Node, Flutter, backups)
 ├── README.md                     # Project documentation & run guides
 │
 ├── backend/                      # Python FastAPI REST API
+│   ├── alembic/                  # Alembic database migrations
+│   │   ├── versions/             # Migration revision scripts
+│   │   │   └── e36378f07849_initial_schema_phase_2.py
+│   │   ├── env.py                # Alembic runtime environment (configured for Psycopg 3)
+│   │   └── script.py.mako        # Migration template
+│   ├── alembic.ini               # Alembic configuration
 │   ├── app/
 │   │   ├── api/
-│   │   │   └── v1/               # API routes (schemes, documents, eligibility)
-│   │   ├── core/                 # Config (pydantic-settings), logging
-│   │   └── main.py               # FastAPI entry point & CORS configuration
-│   ├── tests/                    # Backend unit & integration tests
-│   ├── venv/                     # Python 3.13 virtual environment
-│   ├── .env.example              # Environment variables template
-│   ├── requirements.txt          # Phase 1 backend dependencies
-│   └── run.py                    # Direct runner script
+│   │   │   └── v1/
+│   │   │       ├── __init__.py
+│   │   │       └── api.py        # Central API v1 router
+│   │   ├── core/
+│   │   │   ├── __init__.py
+│   │   │   ├── config.py         # Pydantic Settings & database environment config
+│   │   │   ├── database.py       # SQLAlchemy engine, session lifecycle & health check
+│   │   │   └── logging.py        # Safe structured logging configuration
+│   │   ├── models/               # Domain SQLAlchemy models (Phase 2)
+│   │   │   ├── __init__.py       # Model exports and metadata registration
+│   │   │   ├── user.py           # User entity (citizen/admin)
+│   │   │   ├── profile.py        # UserProfile entity (demographics, income)
+│   │   │   ├── scheme.py         # Scheme repository entity
+│   │   │   ├── document.py       # DocumentMetadata entity (metadata only, no blobs)
+│   │   │   ├── assessment.py     # Assessment entity (PostgreSQL JSONB advisory)
+│   │   │   ├── application.py    # Application entity (manual tracking workflow)
+│   │   │   ├── subscription.py   # Subscription entity (free/premium pricing)
+│   │   │   └── notification.py   # In-app Notification entity
+│   │   ├── __init__.py
+│   │   └── main.py               # FastAPI entry point & health check endpoints
+│   ├── tests/                    # Pytest test suite
+│   │   ├── __init__.py
+│   │   ├── test_health.py        # General health check tests
+│   │   └── test_database.py      # Database models, schemas & health check tests
+│   ├── venv/                     # Python 3.13 virtual environment (gitignored)
+│   ├── .env.example              # Environment variables template (no secrets)
+│   ├── pytest.ini                # Pytest configuration
+│   ├── requirements.txt          # Backend dependencies
+│   └── run.py                    # Root script for starting backend locally
 │
 ├── mobile_app/                   # Flutter Citizen Mobile Client
 │   ├── android/                  # Android native project files & manifests
@@ -64,7 +94,7 @@ Janmitra/
 │   │   ├── features/             # Feature modules (home, schemes, docs, etc.)
 │   │   └── main.dart             # Flutter app entry point
 │   ├── test/                     # Widget tests
-│   ├── .env.example              # Mobile environment configuration
+│   ├── .env.example              # Mobile configuration template
 │   ├── pubspec.yaml              # Flutter dependencies and assets config
 │   └── README.md                 # Mobile-specific instructions
 │
@@ -89,167 +119,201 @@ Janmitra/
 
 ---
 
-## 4. Environment Prerequisites & Required Software
+## 4. Database Models & Domain Architecture (Phase 2)
 
-Before running all components locally, ensure the following software is installed on Windows:
+All database entities are built using **SQLAlchemy 2.x Declarative Base** with **UUID primary keys** and **PostgreSQL JSONB**:
 
-1. **Python 3.11+** (Detected: `Python 3.13.3` installed).
-2. **Node.js 18+ and npm** (Detected: Node `v24.14.1`, npm `11.11.0` installed).
-3. **Git** (Detected: `git 2.53.0` installed).
-4. **Android SDK** (Detected at `C:\Users\<user>\AppData\Local\Android\Sdk`).
-5. **Flutter SDK (3.24+)** *(Required for mobile development)*:
-   - Download the official Flutter Windows bundle from: [flutter.dev/docs/get-started/install/windows](https://flutter.dev/docs/get-started/install/windows)
-   - Extract to `C:\src\flutter`.
-   - Add `C:\src\flutter\bin` to your Windows User Environment `PATH`.
-   - Run `flutter doctor` in PowerShell to verify.
-6. **PostgreSQL 15+** *(Required in Phase 2)*:
-   - Install via Windows Package Manager:
-     ```powershell
-     winget install PostgreSQL.PostgreSQL
-     ```
-   - Or download installer from [postgresql.org](https://www.postgresql.org/download/windows/).
+1. **`User` (`users`)**:
+   - Primary citizen / admin account identity.
+   - Fields: `id` (UUID PK), `role` (`citizen`/`admin`), `email` (unique, nullable), `mobile_number` (unique, nullable), `is_active`, `created_at`, `updated_at`.
+   - *Note: Password authentication is explicitly deferred to later phases.*
 
----
+2. **`UserProfile` (`user_profiles`)**:
+   - Demographic and socioeconomic attributes for eligibility calculation.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`, unique, `ondelete="CASCADE"`), `full_name`, `date_of_birth`, `state`, `district`, `residence_type` (`rural`/`urban`), `annual_family_income`, `occupation`, `education_level`.
+   - *Privacy Rule: Aadhaar number is strictly excluded from general profile storage.*
 
-## 5. Quickstart & Component Run Instructions
+3. **`Scheme` (`schemes`)**:
+   - Official scheme information repository.
+   - Fields: `id` (UUID PK), `scheme_name`, `description`, `department`, `state_applicability`, `eligibility_summary`, `official_source_url`, `official_application_url`, `source_last_verified_at`, `is_active`.
+   - Directs citizens to official government portals for final submission.
 
-### 5.1 Backend (FastAPI) Setup & Run
+4. **`DocumentMetadata` (`document_metadata`)**:
+   - Metadata tracking uploaded documents without storing binary content in the database.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `document_type`, `original_filename`, `storage_reference`, `mime_type`, `file_size`, `upload_status`.
+   - *Architecture Rule: Binary files are stored exclusively on secure local filesystem/cloud storage, never in PostgreSQL.*
 
-The virtual environment is already initialized at `backend/venv`.
+5. **`Assessment` (`assessments`)**:
+   - AI and rule-engine advisory evaluation records.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `scheme_id` (FK to `schemes.id`, nullable), `assessment_type`, `result_data` (PostgreSQL `JSONB`), `overall_readiness_score`.
+   - *Advisory Rule: Results are strictly informational and do not represent government decisions.*
 
-1. **Activate the Virtual Environment**:
-   ```powershell
-   .\backend\venv\Scripts\Activate.ps1
-   ```
-   *(If script execution is restricted in PowerShell, run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`)*.
+6. **`Application` (`applications`)**:
+   - Citizen manual tracking for submitted applications.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `scheme_id` (FK to `schemes.id`), `application_reference_number`, `submission_date`, `status`.
+   - Approved tracking statuses: `Submitted`, `Under Review`, `Pending`, `Document Verification`, `Approved`, `Rejected`, `Completed`.
 
-2. **Configure Environment Variables**:
-   ```powershell
-   Copy-Item backend\.env.example backend\.env
-   ```
+7. **`Subscription` (`subscriptions`)**:
+   - Subscription tier and billing records.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `plan_type` (`free`/`premium`), `billing_cycle` (`monthly`/`six_months`/`yearly`), `status`, `start_date`, `end_date`.
+   - Approved pricing tiers:
+     - Monthly: ₹99 / month
+     - 6 Months: ₹499 / 6 months
+     - Yearly: ₹899 / year
 
-3. **Install Dependencies** (if updating):
-   ```powershell
-   & .\backend\venv\Scripts\pip.exe install -r backend\requirements.txt
-   ```
-
-4. **Start the FastAPI Backend Server**:
-   ```powershell
-   & .\backend\venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --port 8000
-   ```
-   Or simply:
-   ```powershell
-   & .\backend\venv\Scripts\python.exe backend\run.py
-   ```
-
-5. **Verify the Health Check**:
-   Open a browser or PowerShell:
-   ```powershell
-   Invoke-RestMethod -Uri "http://127.0.0.1:8000/health"
-   ```
-   Interactive Swagger documentation: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-
-6. **Run Backend Tests**:
-   ```powershell
-   & .\backend\venv\Scripts\pytest.exe .\backend\tests
-   ```
+8. **`Notification` (`notifications`)**:
+   - Citizen in-app deadline reminders, scheme alerts, and status changes.
+   - Fields: `id` (UUID PK), `user_id` (FK to `users.id`), `title`, `message`, `notification_type`, `scheduled_at`, `is_read`.
 
 ---
 
-### 5.2 Admin Dashboard (React + Vite) Setup & Run
+## 5. PostgreSQL Installation & Setup Guide
 
-1. **Navigate to the admin dashboard directory**:
-   ```powershell
-   cd admin_dashboard
-   ```
+### 5.1 Installing PostgreSQL on Windows
 
-2. **Install dependencies** (already installed in Phase 1):
-   ```powershell
-   npm install
-   ```
+If PostgreSQL is not yet installed on your system:
 
-3. **Start the local development server**:
-   ```powershell
-   npm run dev
-   ```
-   Open your browser at: [http://localhost:3000](http://localhost:3000)
+#### Option A: Windows Package Manager (winget)
+Open PowerShell and run:
+```powershell
+winget install PostgreSQL.PostgreSQL.16
+```
 
-4. **Test production build**:
-   ```powershell
-   npm run build
-   ```
+#### Option B: Official Windows Installer (Recommended)
+1. Download the PostgreSQL 16 Windows Installer from [postgresql.org/download/windows](https://www.postgresql.org/download/windows/).
+2. Run the `.exe` installer.
+3. When prompted, choose an installation directory (e.g., `C:\Program Files\PostgreSQL\16`).
+4. Enter a password for the superuser `postgres` (e.g., `postgres` or your secure local password).
+5. Leave the port set to `5432`.
+6. Complete the setup wizard.
 
----
+### 5.2 Creating the Database & User
 
-### 5.3 Mobile App (Flutter) Setup & Run
+Open **SQL Shell (psql)** or run from PowerShell:
+```powershell
+# Connect to PostgreSQL using psql
+psql -U postgres -h localhost -p 5432
+```
 
-Once Flutter SDK is added to `PATH`:
+In the PostgreSQL prompt, execute:
+```sql
+-- Create the JanMitra Assist database
+CREATE DATABASE janmitra_db;
 
-1. **Navigate to the mobile app directory**:
-   ```powershell
-   cd mobile_app
-   ```
+-- Verify database creation
+\l
+```
 
-2. **Fetch Flutter packages**:
-   ```powershell
-   flutter pub get
-   ```
+### 5.3 Configuring Environment Variables
 
-3. **Verify Flutter toolchain & connected devices**:
-   ```powershell
-   flutter doctor
-   flutter devices
-   ```
+Copy the template to `.env`:
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
 
-4. **Run the mobile app** (on connected Android device or emulator):
-   ```powershell
-   flutter run
-   ```
-
-5. **Run mobile unit/widget tests**:
-   ```powershell
-   flutter test
-   ```
+Update `backend/.env` with your PostgreSQL password:
+```ini
+POSTGRES_SERVER="localhost"
+POSTGRES_PORT=5432
+POSTGRES_USER="postgres"
+POSTGRES_PASSWORD="your_actual_password_here"
+POSTGRES_DB="janmitra_db"
+```
 
 ---
 
-## 6. Common Setup Errors & Troubleshooting
+## 6. Alembic Database Migration Commands
 
-### Issue 1: `flutter : The term 'flutter' is not recognized`
-- **Cause:** Flutter SDK has not been downloaded or its `bin` directory is missing from the Windows `PATH` environment variable.
-- **Fix:**
-  1. Download Flutter SDK from [flutter.dev](https://flutter.dev/docs/get-started/install/windows).
-  2. Extract it (e.g., `C:\src\flutter`).
-  3. Search Windows for "Environment Variables" -> Edit Environment Variables -> Under User variables, select `Path` -> Edit -> Add `C:\src\flutter\bin`.
-  4. Restart your terminal and run `flutter doctor`.
+Alembic is configured to read the connection URL dynamically from `backend/app/core/config.py` using the **Psycopg 3 driver**.
 
-### Issue 2: PowerShell Script Execution Error (`running scripts is disabled on this system`)
-- **Cause:** Windows PowerShell execution policy restricts scripts.
-- **Fix:** Run this once in PowerShell:
+All commands should be executed from the `backend/` directory:
+
+```powershell
+Set-Location backend
+```
+
+### 6.1 Inspect Pending Migrations (Offline SQL generation)
+To view the generated SQL without connecting to a live database:
+```powershell
+& .\venv\Scripts\alembic.exe upgrade head --sql
+```
+
+### 6.2 Apply Migrations to PostgreSQL (Online)
+Once PostgreSQL is running:
+```powershell
+& .\venv\Scripts\alembic.exe upgrade head
+```
+
+### 6.3 Check Migration Status
+```powershell
+& .\venv\Scripts\alembic.exe current
+```
+
+### 6.4 Generate Future Migrations (When modifying models)
+```powershell
+& .\venv\Scripts\alembic.exe revision --autogenerate -m "describe_changes"
+```
+
+### 6.5 Rollback Migrations (If required)
+```powershell
+& .\venv\Scripts\alembic.exe downgrade -1
+```
+
+---
+
+## 7. Running & Testing the Backend
+
+### 7.1 Start Backend Server
+```powershell
+& .\backend\venv\Scripts\python.exe backend\run.py
+```
+
+### 7.2 Verify Health Check Endpoints
+
+- **General Health Check:**
   ```powershell
-  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+  Invoke-RestMethod -Uri "http://127.0.0.1:8000/health"
+  ```
+  Returns `200 OK`:
+  ```json
+  {
+    "status": "healthy",
+    "message": "JanMitra Assist backend is running successfully",
+    "environment": "development",
+    "version": "1.0.0"
+  }
   ```
 
-### Issue 3: Port 8000 or Port 3000 Already in Use
-- **Cause:** A previous instance of the server or another app is holding the port.
-- **Fix:**
-  Check the active port:
+- **Database Connectivity Health Check:**
   ```powershell
-  Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+  Invoke-RestMethod -Uri "http://127.0.0.1:8000/health/database"
   ```
-  Or change the port in `backend/.env` (`PORT=8001`) or `admin_dashboard/vite.config.js` (`port: 3001`).
+  - When PostgreSQL is connected: Returns `200 OK` (`{"status": "healthy", "database": "connected"}`).
+  - When PostgreSQL is offline: Returns `503 Service Unavailable` (`{"status": "unhealthy", "database": "disconnected"}`) without leaking secrets.
 
-### Issue 4: Android Emulator Cannot Connect to FastAPI Backend
-- **Cause:** `localhost` inside the Android Emulator refers to the emulator itself, not your Windows machine.
-- **Fix:** Use the special alias `http://10.0.2.2:8000` from the Android emulator. This is pre-configured in `mobile_app/lib/core/network/api_endpoints.dart`.
+- **Interactive API Documentation (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+### 7.3 Run All Automated Tests
+```powershell
+& .\backend\venv\Scripts\pytest.exe .\backend\tests
+```
+Executes 14 unit and integration tests covering:
+- Metadata table registrations for all 8 entities
+- Column constraints, UUID types, JSONB types
+- One-to-one and one-to-many relationships
+- Health check endpoints and secure error handling
 
 ---
 
-## 7. Implementation Roadmap & Phases
+## 8. Common Troubleshooting
 
-- **Phase 1: Project Setup & Foundation** *(Completed)*
-- **Phase 2: Database Schema & Scheme Discovery Module** *(Pending Approval)*
-- **Phase 3: Document Upload & Local OCR Processing**
-- **Phase 4: AI-Powered Eligibility Evaluation Engine**
-- **Phase 5: Readiness Reports & Application Guidance**
-- **Phase 6: Integration, Polish & Submission Preparation**
+### 1. `OperationalError: connection to server at "localhost", port 5432 failed`
+- **Cause:** PostgreSQL service is stopped or port 5432 is not listening.
+- **Fix:** Open Windows Services (`services.msc`), locate `postgresql-x64-16`, and click **Start**.
+
+### 2. `password authentication failed for user "postgres"`
+- **Cause:** The password in `backend/.env` does not match the password specified during PostgreSQL installation.
+- **Fix:** Update `POSTGRES_PASSWORD` in `backend/.env` with your configured password.
+
+### 3. `database "janmitra_db" does not exist`
+- **Fix:** Create the database using `psql -U postgres -c "CREATE DATABASE janmitra_db;"`.

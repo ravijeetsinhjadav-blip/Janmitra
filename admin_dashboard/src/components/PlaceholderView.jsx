@@ -12,3 +12,4 @@ export default function PlaceholderView({ title, phase, description }) {
     </div>
   );
 }
+

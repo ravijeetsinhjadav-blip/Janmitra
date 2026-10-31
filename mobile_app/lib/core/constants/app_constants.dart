@@ -15,3 +15,4 @@ class AppConstants {
     'Application Readiness Reports & Portal Access (Phase 5)',
   ];
 }
+

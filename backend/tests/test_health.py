@@ -20,3 +20,4 @@ def test_root_endpoint():
     data = response.json()
     assert data.get("status") == "online"
     assert data.get("project") == "JanMitra Assist"
+

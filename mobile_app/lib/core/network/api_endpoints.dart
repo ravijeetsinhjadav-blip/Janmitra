@@ -13,3 +13,4 @@ class ApiEndpoints {
   static const String eligibility = '/api/v1/eligibility';
   static const String readiness = '/api/v1/readiness';
 }
+
