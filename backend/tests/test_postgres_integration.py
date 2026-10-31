@@ -87,6 +87,11 @@ class TestPostgresDialectCompatibility:
         assert "event_id VARCHAR(100)" in wh_ddl
         assert "payload_summary JSONB" in wh_ddl
 
+        doc_table = Base.metadata.tables["document_metadata"]
+        doc_ddl = str(CreateTable(doc_table).compile(dialect=pg_dialect))
+        assert "processing_token UUID" in doc_ddl
+        assert "lease_expires_at TIMESTAMP WITH TIME ZONE" in doc_ddl
+
 
 class TestPostgresLiveIntegration:
     """Live PostgreSQL integration tests.

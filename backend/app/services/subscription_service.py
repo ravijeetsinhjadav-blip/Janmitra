@@ -198,13 +198,16 @@ class SubscriptionService:
     def auto_heal_stale_processing_documents(
         cls, db: Session, user_id: uuid.UUID, stale_seconds: int = 300
     ) -> int:
-        """Auto-heal abandoned in-flight reservations (SEC-05).
+        """Auto-heal abandoned in-flight reservations (SEC-05, AUD-03).
         
         Any DocumentMetadata record for this user remaining in PROCESSING or PENDING_OCR status
-        longer than stale_seconds (default 5 minutes) represents a crashed, killed, or abandoned
-        worker. It is transitioned to OCR_FAILED so the citizen's quota is never stuck indefinitely.
+        whose lease has expired (lease_expires_at < now or created_at < now - stale_seconds)
+        represents a crashed, killed, or abandoned worker. It is transitioned to OCR_FAILED and
+        its processing_token is revoked so the citizen's quota is never stuck indefinitely.
+        Active workers with a valid, non-expired lease are preserved.
         """
-        threshold = datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
+        now = datetime.now(timezone.utc)
+        fallback_threshold = now - timedelta(seconds=stale_seconds)
         stale_docs = (
             db.query(DocumentMetadata)
             .filter(
@@ -213,18 +216,48 @@ class SubscriptionService:
                     DocumentProcessingStatus.PROCESSING,
                     DocumentProcessingStatus.PENDING_OCR,
                 ]),
-                DocumentMetadata.created_at < threshold,
+                (
+                    (DocumentMetadata.lease_expires_at != None) & (DocumentMetadata.lease_expires_at < now)
+                ) | (
+                    (DocumentMetadata.lease_expires_at == None) & (DocumentMetadata.created_at < fallback_threshold)
+                ),
             )
             .all()
         )
         if stale_docs:
             for d in stale_docs:
                 d.ocr_status = DocumentProcessingStatus.OCR_FAILED
-                d.ocr_error_message = "OCR processing timed out or server restarted"
+                d.ocr_error_message = "OCR processing timed out or lease expired (server restarted)"
                 d.manual_review_required = True
+                d.processing_token = None  # Revoke ownership token (AUD-04)
+                d.lease_expires_at = None
             db.commit()
             logger.info(f"Auto-healed {len(stale_docs)} stale processing documents for user {user_id}")
         return len(stale_docs)
+
+    @classmethod
+    def renew_document_lease(
+        cls, db: Session, doc_id: uuid.UUID, processing_token: uuid.UUID, extend_seconds: int = 300
+    ) -> bool:
+        """Renew active processing lease for an in-flight OCR worker (AUD-03, AUD-04)."""
+        now = datetime.now(timezone.utc)
+        new_expiry = now + timedelta(seconds=extend_seconds)
+        rows = (
+            db.query(DocumentMetadata)
+            .filter(
+                DocumentMetadata.id == doc_id,
+                DocumentMetadata.processing_token == processing_token,
+                DocumentMetadata.ocr_status.in_([
+                    DocumentProcessingStatus.PROCESSING,
+                    DocumentProcessingStatus.PENDING_OCR,
+                ]),
+            )
+            .update({"lease_expires_at": new_expiry})
+        )
+        if rows > 0:
+            db.commit()
+            return True
+        return False
 
     @classmethod
     def get_quota_status(cls, db: Session, user_id: uuid.UUID) -> UsageQuotaStatus:
@@ -418,10 +451,36 @@ class SubscriptionService:
             db.commit()
 
     @classmethod
-    def finalize_document_analysis(cls, db: Session, user_id: uuid.UUID) -> None:
-        """Finalize quota consumption upon successful OCR extraction (SEC-05)."""
+    def finalize_document_analysis(
+        cls,
+        db: Session,
+        user_id: uuid.UUID,
+        doc_id: Optional[uuid.UUID] = None,
+        processing_token: Optional[uuid.UUID] = None,
+    ) -> bool:
+        """Finalize quota consumption upon successful OCR extraction with lease verification (SEC-05, AUD-04)."""
         now = datetime.now(timezone.utc)
         month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+
+        # If token provided, verify worker ownership before finalizing
+        if doc_id and processing_token:
+            doc = (
+                db.query(DocumentMetadata)
+                .filter(
+                    DocumentMetadata.id == doc_id,
+                    DocumentMetadata.processing_token == processing_token,
+                )
+                .first()
+            )
+            if not doc:
+                logger.warning(
+                    f"Processing token mismatch or expired lease for document {doc_id}. "
+                    "Rejecting finalization to prevent stale worker quota overruns."
+                )
+                return False
+            # Clear lease token on success
+            doc.processing_token = None
+            doc.lease_expires_at = None
 
         quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=True)
         completed_count = (
@@ -441,12 +500,32 @@ class SubscriptionService:
             quota_record.doc_analyses_used = completed_count
             db.commit()
             db.refresh(quota_record)
+        return True
 
     @classmethod
-    def release_document_analysis_quota(cls, db: Session, user_id: uuid.UUID) -> None:
-        """Release reservation if OCR extraction failed or document processing aborted (SEC-05)."""
+    def release_document_analysis_quota(
+        cls,
+        db: Session,
+        user_id: uuid.UUID,
+        doc_id: Optional[uuid.UUID] = None,
+        processing_token: Optional[uuid.UUID] = None,
+    ) -> bool:
+        """Release reservation if OCR extraction failed with lease verification (SEC-05, AUD-04)."""
         now = datetime.now(timezone.utc)
         month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+
+        if doc_id and processing_token:
+            doc = (
+                db.query(DocumentMetadata)
+                .filter(
+                    DocumentMetadata.id == doc_id,
+                    DocumentMetadata.processing_token == processing_token,
+                )
+                .first()
+            )
+            if doc:
+                doc.processing_token = None
+                doc.lease_expires_at = None
 
         quota_record = cls.get_or_create_monthly_quota_record(db, user_id, for_update=True)
         completed_count = (
@@ -465,6 +544,7 @@ class SubscriptionService:
         if quota_record:
             quota_record.doc_analyses_used = completed_count
             db.commit()
+        return True
 
     @classmethod
     def consume_document_analysis_quota(cls, db: Session, user_id: uuid.UUID) -> None:

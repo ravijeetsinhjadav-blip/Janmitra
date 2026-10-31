@@ -270,8 +270,8 @@ class TestDocumentVaultAndOCR:
         assert doc["ocr_confidence"] < 0.70
         assert "manual citizen verification required" in doc["ocr_error_message"].lower()
 
-    def test_retry_ocr(self, client):
-        """Citizen can re-trigger OCR processing on an existing document."""
+    def test_retry_ocr(self, client, db_session):
+        """Citizen can re-trigger OCR processing on an eligible failed document; completed documents return 409 (AUD-05)."""
         headers = get_auth_headers(client, "+919900000014")
         res_up = client.post(
             "/api/v1/documents/upload",
@@ -281,6 +281,17 @@ class TestDocumentVaultAndOCR:
         )
         doc_id = res_up.json()["document"]["id"]
 
+        # 1. Retrying an already COMPLETED document is rejected with HTTP 409 Conflict to protect valid OCR data (AUD-05)
+        res_conflict = client.post(f"/api/v1/documents/{doc_id}/retry-ocr", headers=headers)
+        assert res_conflict.status_code == 409
+        assert "cannot be retried" in res_conflict.json()["detail"].lower()
+
+        # 2. Mark document as OCR_FAILED to simulate an eligible failed extraction
+        doc_record = db_session.query(DocumentMetadata).filter(DocumentMetadata.id == uuid.UUID(doc_id)).first()
+        doc_record.ocr_status = DocumentProcessingStatus.OCR_FAILED
+        db_session.commit()
+
+        # 3. Retrying the failed document succeeds
         res_retry = client.post(f"/api/v1/documents/{doc_id}/retry-ocr", headers=headers)
         assert res_retry.status_code == 200
         doc = res_retry.json()

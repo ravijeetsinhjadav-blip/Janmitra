@@ -115,6 +115,18 @@ class DocumentMetadata(Base):
         nullable=True,
         comment="Error description if OCR processing encountered a failure",
     )
+    processing_token = Column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+        comment="Ownership lease token identifying active processing attempt",
+    )
+    lease_expires_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="Lease expiration timestamp for in-flight OCR execution",
+    )
 
     created_at = Column(
         DateTime(timezone=True),

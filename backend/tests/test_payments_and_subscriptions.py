@@ -1098,9 +1098,9 @@ class TestRazorpayPaymentsModule:
         quota2 = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
         assert quota2.ai_document_analyses_used == 1
 
-        # 3. Retrying an already COMPLETED document does NOT double count
+        # 3. Retrying an already COMPLETED document returns HTTP 409 Conflict (AUD-05)
         res3 = client_for_user.post(f"/api/v1/documents/{doc_id}/retry-ocr")
-        assert res3.status_code == 200
+        assert res3.status_code == 409
         quota3 = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
         assert quota3.ai_document_analyses_used == 1
 
@@ -1132,4 +1132,204 @@ class TestRazorpayPaymentsModule:
         db_session.refresh(stale_doc)
         assert stale_doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
         assert "timed out" in stale_doc.ocr_error_message.lower()
+
+    def test_retry_already_successful_document_returns_409_and_preserves_data(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """AUD-05: Retrying an already OCR_COMPLETED document returns HTTP 409 and preserves all existing text."""
+        doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="verified_income.pdf",
+            storage_reference="/vault/verified_income.pdf",
+            mime_type="application/pdf",
+            file_size=2048,
+            ocr_status=DocumentProcessingStatus.OCR_COMPLETED,
+            ocr_extracted_text="ANNUAL FAMILY INCOME RS 120,000",
+            ocr_confidence=0.94,
+            ocr_metadata={"issuer": "Tehsildar"},
+            manual_review_required=False,
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        res = client_for_user.post(f"/api/v1/documents/{doc.id}/retry-ocr")
+        assert res.status_code == 409
+        assert "cannot be retried" in res.json()["detail"].lower()
+
+        # Verify existing data is 100% preserved
+        db_session.refresh(doc)
+        assert doc.ocr_status == DocumentProcessingStatus.OCR_COMPLETED
+        assert doc.ocr_extracted_text == "ANNUAL FAMILY INCOME RS 120,000"
+        assert doc.ocr_confidence == 0.94
+        assert doc.ocr_metadata == {"issuer": "Tehsildar"}
+
+    def test_expired_worker_token_cannot_finalize(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """AUD-04: Worker with incorrect or expired processing token cannot finalize quota."""
+        token_a = uuid.uuid4()
+        token_b = uuid.uuid4()
+        doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="worker_test.pdf",
+            storage_reference="/vault/worker_test.pdf",
+            mime_type="application/pdf",
+            file_size=1024,
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            processing_token=token_a,
+            lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        # Worker B tries to finalize using token_b (mismatch)
+        success = SubscriptionService.finalize_document_analysis(
+            db=db_session,
+            user_id=auth_citizen.id,
+            doc_id=doc.id,
+            processing_token=token_b,
+        )
+        assert success is False
+
+        # Quota remains 0
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 0
+
+    def test_recovered_document_rejects_old_worker_result(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """AUD-03, AUD-04: Stale recovered document rejects late finalization by expired worker."""
+        token_old = uuid.uuid4()
+        past_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="stale_worker.pdf",
+            storage_reference="/vault/stale_worker.pdf",
+            mime_type="application/pdf",
+            file_size=1024,
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            processing_token=token_old,
+            lease_expires_at=past_time,
+            created_at=past_time,
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        # Auto-heal runs and revokes lease
+        SubscriptionService.auto_heal_stale_processing_documents(db_session, auth_citizen.id)
+        db_session.refresh(doc)
+        assert doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
+        assert doc.processing_token is None
+
+        # Old worker finishes late and attempts to finalize with token_old
+        success = SubscriptionService.finalize_document_analysis(
+            db=db_session,
+            user_id=auth_citizen.id,
+            doc_id=doc.id,
+            processing_token=token_old,
+        )
+        assert success is False
+        db_session.refresh(doc)
+        assert doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
+
+    def test_active_worker_with_renewed_lease_not_marked_failed(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """AUD-03: Active worker with renewed lease is not revoked by auto-heal even if created_at > 300s."""
+        token = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="long_running.pdf",
+            storage_reference="/vault/long_running.pdf",
+            mime_type="application/pdf",
+            file_size=5000,
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            processing_token=token,
+            created_at=now - timedelta(minutes=6),  # created 6 mins ago
+            lease_expires_at=now + timedelta(minutes=4),  # but heartbeat renewed lease
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        # Auto-heal should NOT revoke this document because lease_expires_at > now
+        healed = SubscriptionService.auto_heal_stale_processing_documents(db_session, auth_citizen.id)
+        assert healed == 0
+
+        db_session.refresh(doc)
+        assert doc.ocr_status == DocumentProcessingStatus.PROCESSING
+        assert doc.processing_token == token
+
+    def test_failed_retry_consumes_zero_quota(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """AUD-01: Eligible failed document retry that fails again still consumes zero quota."""
+        from unittest.mock import patch
+        from app.services.ocr_service import OCRResult
+        from app.services.storage_service import storage_service
+
+        valid_pdf = b"%PDF-1.4\n1 0 obj\n<<\n>>\nendobj\ntrailer\n<<\n>>\n%%EOF"
+        storage_ref = storage_service.save_file(auth_citizen.id, valid_pdf, "pdf")
+
+        doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="unreadable_scan.pdf",
+            storage_reference=storage_ref,
+            mime_type="application/pdf",
+            file_size=len(valid_pdf),
+            ocr_status=DocumentProcessingStatus.OCR_FAILED,
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        # Mock OCR service to fail again
+        with patch("app.services.ocr_service.ocr_service.process_document") as mock_ocr:
+            mock_ocr.return_value = OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message="Still unreadable",
+            )
+            res = client_for_user.post(f"/api/v1/documents/{doc.id}/retry-ocr")
+            assert res.status_code == 200
+            assert res.json()["ocr_status"] == DocumentProcessingStatus.OCR_FAILED
+
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 0
+
+    def test_duplicate_finalization_is_idempotent(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """AUD-07: Multiple finalize calls do not double count usage."""
+        doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="idempotent.pdf",
+            storage_reference="/vault/idempotent.pdf",
+            mime_type="application/pdf",
+            file_size=1024,
+            ocr_status=DocumentProcessingStatus.OCR_COMPLETED,
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        # Call finalize 3 times
+        for _ in range(3):
+            SubscriptionService.finalize_document_analysis(db_session, auth_citizen.id)
+
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 1
 
