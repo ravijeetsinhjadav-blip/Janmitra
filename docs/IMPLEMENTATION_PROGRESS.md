@@ -523,9 +523,37 @@ Following an independent security audit of commit `ac81e1c`, comprehensive techn
 
 ### Verified Test Results
 
-- **Backend Test Suite:** **125 passed, 1 skipped (live PostgreSQL), 0 failed** across 126 tests:
-  - 17 dedicated tests in `tests/test_payments_and_subscriptions.py` verifying catalog, quotas, exclusions, gateway checks, webhook deduplication, full/partial refunds, PII masking, config validation, and assistance caching.
+- **Backend Test Suite:** **135 passed, 3 skipped (live PostgreSQL), 0 failed** across 138 tests:
+  - 26 dedicated tests in `tests/test_payments_and_subscriptions.py` verifying catalog, quotas, exclusions, gateway checks, webhook deduplication, full/partial refunds, dispute state machine, PII masking, config validation, assistance caching, failed OCR zero-quota consumption, invalid upload zero-quota consumption, retry OCR quota semantics, and stale processing self-healing.
+  - 7 tests in `tests/test_postgres_integration.py` verifying PostgreSQL DDL dialect compilation and multi-threaded concurrency locking (`TestPostgresConcurrencyLive`).
 - **Flutter Test Suite:** **35 passed, 0 failed** across all test suites:
   - 11 dedicated tests in `test/subscription_widgets_test.dart` verifying models, `MockRazorpayAdapter` callbacks, and UI flows.
-- **Dart Analysis:** **0 issues found** via `dart analyze lib/features/subscription test/subscription_widgets_test.dart`.
-- **Database Migration:** Migration `c4d5e6f7a8b9_add_webhook_events_and_guide_cache.py` verified via `alembic upgrade head --sql`.
+- **Dart Analysis:** **0 issues found** via `dart analyze lib/features/subscription`.
+- **Database Migrations:** Migrations `c4d5e6f7a8b9` and `d5e6f7a8b9c0` verified via `alembic upgrade head --sql`.
+
+---
+
+## Phase 7.2 Critical Security & Quota Remediation Summary
+
+1. **Document Quota Lifecycle & Concurrency (SEC-05, SEC-06):**
+   - Implemented three-phase reservation/finalization/release lifecycle in `DocumentService`:
+     - Phase 0: File size, format, and magic byte validation execute before quota checks. Invalid files return HTTP 400 with 0 quota consumed.
+     - Phase 1: `SubscriptionService.reserve_document_analysis_quota` checks `completed + in_flight < limit` under row-level lock `with_for_update()`, creating `DocumentMetadata` in `PROCESSING` status.
+     - Phase 2: OCR runs with structured exception handling.
+     - Phase 3: Successful OCR (`OCR_COMPLETED`, `MANUAL_REVIEW_REQUIRED`) invokes `finalize_document_analysis` (1 quota unit consumed). Failed OCR or exceptions invoke `release_document_analysis_quota`, setting `ocr_status = OCR_FAILED` (0 quota units consumed).
+   - In `DocumentService.retry_ocr`: Retrying a failed document reserves quota and only finalizes on success; retrying an already completed document updates results without double-charging.
+   - Built self-healing crash recovery (`auto_heal_stale_processing_documents`): Stale records in `PROCESSING` status older than 5 minutes (300s) are automatically transitioned to `OCR_FAILED`, preventing orphaned in-flight reservations from locking citizen quotas indefinitely.
+
+2. **Payment Concurrency & Webhook Idempotency (SEC-04):**
+   - Implemented row-level pessimistic locking (`with_for_update()`) on `payment_transactions` across `/payments/verify` and `/payments/webhook`.
+   - Prevented race conditions between simultaneous user verification and webhook processing.
+   - Handled duplicate webhooks via `WebhookEvent.event_id` unique constraint with `IntegrityError` rollback.
+
+3. **Cumulative Refund & Dispute State Machine (SEC-07):**
+   - Tracked all refunds in `tx.refunds_log` with paise-to-INR conversions (`round(paise / 100.0, 2)`).
+   - Handled full vs. partial refunds: full refunds (`amount_refunded >= amount`) revoke subscriptions immediately, while partial refunds retain active subscriptions.
+   - Implemented dispute state transitions (`created`, `under_review`, `won`, `lost`, `closed`), automatically revoking subscriptions with `status = "revoked_chargeback"` on lost disputes.
+
+4. **Webhook Financial Privacy Allowlists (SEC-10):**
+   - Enforced strict allowlists (`PAYMENT_ENTITY_ALLOWLIST`, `REFUND_ENTITY_ALLOWLIST`, `DISPUTE_ENTITY_ALLOWLIST`).
+   - Stripped all customer names, billing addresses, acquirer data, and notes. Contact numbers, emails, and VPAs are masked to show only trailing 4 characters.

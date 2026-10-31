@@ -979,3 +979,157 @@ class TestRazorpayPaymentsModule:
         quota_released = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
         assert quota_released.ai_guidance_sessions_used == init_used
 
+    def test_failed_ocr_upload_consumes_zero_quota(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-05: Upload with failed OCR creates document in vault but consumes ZERO quota units."""
+        from unittest.mock import patch
+        from app.services.ocr_service import OCRResult
+        import io
+
+        valid_pdf = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\ntrailer\n<<\n>>\n%%EOF"
+
+        with patch("app.services.ocr_service.ocr_service.process_document") as mock_ocr:
+            mock_ocr.return_value = OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"error": "Image blur too high"},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message="Image blur too high",
+            )
+
+            res = client_for_user.post(
+                "/api/v1/documents/upload",
+                files={"file": ("blurry_cert.pdf", io.BytesIO(valid_pdf), "application/pdf")},
+                data={"document_type": "income_certificate"},
+            )
+
+            assert res.status_code == 201
+            data = res.json()["document"]
+            assert data["ocr_status"] == DocumentProcessingStatus.OCR_FAILED
+
+            # Quota status MUST be 0 used!
+            quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+            assert quota.ai_document_analyses_used == 0
+            assert quota.can_analyze_document is True
+
+    def test_invalid_file_upload_consumes_zero_quota(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-05: Invalid file upload rejected with 400 Bad Request leaves quota completely untouched."""
+        import io
+
+        res = client_for_user.post(
+            "/api/v1/documents/upload",
+            files={"file": ("corrupted.pdf", io.BytesIO(b"NOT_A_REAL_PDF_HEADER"), "application/pdf")},
+            data={"document_type": "income_certificate"},
+        )
+        assert res.status_code == 400
+
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 0
+        assert quota.can_analyze_document is True
+
+    def test_successful_ocr_upload_consumes_exactly_one_quota(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-05: Valid document upload with successful OCR consumes exactly 1 quota unit."""
+        import io
+        valid_pdf = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\ntrailer\n<<\n>>\n%%EOF"
+
+        res = client_for_user.post(
+            "/api/v1/documents/upload",
+            files={"file": ("income_cert.pdf", io.BytesIO(valid_pdf), "application/pdf")},
+            data={"document_type": "income_certificate"},
+        )
+        assert res.status_code == 201
+        data = res.json()["document"]
+        assert data["ocr_status"] == DocumentProcessingStatus.OCR_COMPLETED
+
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 1
+        assert quota.can_analyze_document is True
+
+    def test_retry_ocr_on_failed_document_consumes_quota_only_on_success(
+        self, client_for_user: TestClient, db_session: Session, auth_citizen: User
+    ):
+        """SEC-05: Retrying a failed document charges quota only when OCR succeeds."""
+        from unittest.mock import patch
+        from app.services.ocr_service import OCRResult
+        import io
+
+        valid_pdf = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\ntrailer\n<<\n>>\n%%EOF"
+
+        # 1. Initial upload fails OCR -> 0 quota used
+        with patch("app.services.ocr_service.ocr_service.process_document") as mock_ocr:
+            mock_ocr.return_value = OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message="OCR error",
+            )
+            res1 = client_for_user.post(
+                "/api/v1/documents/upload",
+                files={"file": ("doc_retry.pdf", io.BytesIO(valid_pdf), "application/pdf")},
+                data={"document_type": "income_certificate"},
+            )
+            assert res1.status_code == 201
+            doc_id = res1.json()["document"]["id"]
+
+        quota1 = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota1.ai_document_analyses_used == 0
+
+        # 2. Retry OCR succeeds -> now 1 quota used
+        with patch("app.services.ocr_service.ocr_service.process_document") as mock_ocr_success:
+            mock_ocr_success.return_value = OCRResult(
+                extracted_text="INCOME CERTIFICATE Rs 50,000",
+                confidence=0.95,
+                metadata={},
+                status=DocumentProcessingStatus.OCR_COMPLETED,
+                manual_review_required=False,
+            )
+            res2 = client_for_user.post(f"/api/v1/documents/{doc_id}/retry-ocr")
+            assert res2.status_code == 200
+            assert res2.json()["ocr_status"] == DocumentProcessingStatus.OCR_COMPLETED
+
+        quota2 = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota2.ai_document_analyses_used == 1
+
+        # 3. Retrying an already COMPLETED document does NOT double count
+        res3 = client_for_user.post(f"/api/v1/documents/{doc_id}/retry-ocr")
+        assert res3.status_code == 200
+        quota3 = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota3.ai_document_analyses_used == 1
+
+    def test_stale_processing_document_auto_healed(
+        self, db_session: Session, auth_citizen: User
+    ):
+        """SEC-05: Abandoned PROCESSING document older than 5 minutes is auto-healed to OCR_FAILED."""
+        stale_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        stale_doc = DocumentMetadata(
+            id=uuid.uuid4(),
+            user_id=auth_citizen.id,
+            document_type="income_certificate",
+            original_filename="crashed_job.pdf",
+            storage_reference="/vault/crashed_job.pdf",
+            mime_type="application/pdf",
+            file_size=2048,
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            created_at=stale_time,
+            updated_at=stale_time,
+        )
+        db_session.add(stale_doc)
+        db_session.commit()
+
+        # Quota check should auto-heal this stale record
+        quota = SubscriptionService.get_quota_status(db_session, auth_citizen.id)
+        assert quota.ai_document_analyses_used == 0
+        assert quota.can_analyze_document is True
+
+        db_session.refresh(stale_doc)
+        assert stale_doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
+        assert "timed out" in stale_doc.ocr_error_message.lower()
+

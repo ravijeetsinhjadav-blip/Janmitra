@@ -9,6 +9,7 @@ from app.models.scheme import Scheme
 from app.models.user import User
 from app.services.storage_service import storage_service
 from app.services.ocr_service import ocr_service, sanitize_ocr_error_message, OCRResult
+from app.services.subscription_service import SubscriptionService
 from app.schemas.document import (
     DocumentMetadataResponse,
     DocumentListResponse,
@@ -29,7 +30,7 @@ class DocumentService:
         file: UploadFile,
         document_type: str,
     ) -> DocumentMetadata:
-        """Validate, persist to disk, run OCR, and store metadata."""
+        """Validate, reserve quota, persist to disk, run OCR, and store metadata (SEC-05, SEC-06)."""
         if not file.filename:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -47,21 +48,55 @@ class DocumentService:
                 detail=f"Failed to read uploaded file: {str(exc)}",
             )
 
-        # Validate file size, extension, and magic bytes
+        # 1. Phase 0: Validate file size, extension, and magic bytes (ZERO quota touched if invalid)
         detected_mime, normalized_ext = storage_service.validate_file(
             file_bytes=file_bytes,
             filename=sanitized_filename,
             declared_content_type=file.content_type,
         )
 
-        # Save to disk with opaque storage reference
+        # 2. Phase 1: Concurrency-safe quota reservation under pessimistic row lock
+        SubscriptionService.reserve_document_analysis_quota(db=db, user_id=user.id)
+
+        # 3. Save to disk with opaque storage reference
         storage_reference = storage_service.save_file(
             user_id=user.id,
             file_bytes=file_bytes,
             extension=normalized_ext,
         )
 
-        # Execute OCR processing
+        # 4. Create DocumentMetadata record in PROCESSING status to hold in-flight reservation
+        doc_record = DocumentMetadata(
+            user_id=user.id,
+            document_type=document_type.strip().lower(),
+            original_filename=sanitized_filename,
+            storage_reference=storage_reference,
+            mime_type=detected_mime,
+            file_size=len(file_bytes),
+            upload_status="uploaded",
+            ocr_status=DocumentProcessingStatus.PROCESSING,
+            ocr_extracted_text=None,
+            ocr_confidence=0.0,
+            ocr_metadata={},
+            ocr_completed_at=None,
+            manual_review_required=False,
+            ocr_error_message=None,
+        )
+
+        try:
+            db.add(doc_record)
+            db.commit()
+            db.refresh(doc_record)
+        except Exception as exc:
+            db.rollback()
+            storage_service.delete_file(storage_reference)
+            logger.error("Failed to persist initial document metadata: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database error occurred while persisting document metadata.",
+            )
+
+        # 5. Phase 2: Execute OCR processing
         try:
             ocr_result = ocr_service.process_document(
                 file_bytes=file_bytes,
@@ -81,38 +116,52 @@ class DocumentService:
                 error_message=f"OCR execution failure: {safe_msg}",
             )
 
-        # Create DocumentMetadata record
-        doc_record = DocumentMetadata(
-            user_id=user.id,
-            document_type=document_type.strip().lower(),
-            original_filename=sanitized_filename,
-            storage_reference=storage_reference,
-            mime_type=detected_mime,
-            file_size=len(file_bytes),
-            upload_status="uploaded",
-            ocr_status=ocr_result.status if ocr_result else DocumentProcessingStatus.OCR_FAILED,
-            ocr_extracted_text=ocr_result.extracted_text if ocr_result else None,
-            ocr_confidence=ocr_result.confidence if ocr_result else 0.0,
-            ocr_metadata=ocr_result.metadata if ocr_result else {},
-            ocr_completed_at=ocr_result.completed_at if ocr_result else None,
-            manual_review_required=ocr_result.manual_review_required if ocr_result else True,
-            ocr_error_message=ocr_result.error_message if ocr_result else "OCR execution failure",
-        )
-
-
-        try:
-            db.add(doc_record)
-            db.commit()
-            db.refresh(doc_record)
-        except Exception as exc:
-            db.rollback()
-            # Clean up saved file on disk if DB commit fails
-            storage_service.delete_file(storage_reference)
-            logger.error("Failed to persist document metadata: %s", exc)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error occurred while persisting document metadata.",
+        # 6. Phase 3: Finalize or Release quota based on OCR outcome
+        if ocr_result and ocr_result.status in [
+            DocumentProcessingStatus.OCR_COMPLETED,
+            DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED,
+        ]:
+            # Success: update document and finalize quota
+            doc_record.ocr_status = ocr_result.status
+            doc_record.ocr_extracted_text = ocr_result.extracted_text
+            doc_record.ocr_confidence = ocr_result.confidence
+            doc_record.ocr_metadata = ocr_result.metadata
+            doc_record.ocr_completed_at = ocr_result.completed_at
+            doc_record.manual_review_required = ocr_result.manual_review_required
+            doc_record.ocr_error_message = ocr_result.error_message
+            try:
+                db.commit()
+                db.refresh(doc_record)
+            except Exception as exc:
+                db.rollback()
+                logger.error("Failed to update completed document status: %s", exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database error occurred while updating document status.",
+                )
+            SubscriptionService.finalize_document_analysis(db=db, user_id=user.id)
+        else:
+            # Failure: mark document as OCR_FAILED and release quota reservation (0 quota consumed)
+            doc_record.ocr_status = DocumentProcessingStatus.OCR_FAILED
+            doc_record.ocr_extracted_text = ocr_result.extracted_text if ocr_result else None
+            doc_record.ocr_confidence = ocr_result.confidence if ocr_result else 0.0
+            doc_record.ocr_metadata = ocr_result.metadata if ocr_result else {}
+            doc_record.ocr_completed_at = ocr_result.completed_at if ocr_result else None
+            doc_record.manual_review_required = True
+            doc_record.ocr_error_message = (
+                ocr_result.error_message if ocr_result else "OCR execution failure"
             )
+            try:
+                db.commit()
+                db.refresh(doc_record)
+            except Exception as exc:
+                db.rollback()
+                logger.error("Failed to update failed document status: %s", exc)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database error occurred while updating document status.",
+                )
+            SubscriptionService.release_document_analysis_quota(db=db, user_id=user.id)
 
         return doc_record
 
@@ -204,15 +253,24 @@ class DocumentService:
         document_id: uuid.UUID,
         user: User,
     ) -> DocumentMetadata:
-        """Re-run OCR extraction on an existing document."""
+        """Re-run OCR extraction on an existing document with quota safety (SEC-05, SEC-06)."""
         doc = DocumentService.get_document_by_id(db, document_id, user)
 
         # Prevent duplicate concurrent processing
-        if doc.ocr_status == DocumentProcessingStatus.PROCESSING:
+        if doc.ocr_status in [
+            DocumentProcessingStatus.PROCESSING,
+            DocumentProcessingStatus.PENDING_OCR,
+        ]:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="OCR extraction is already currently processing for this document.",
             )
+
+        was_failed = (doc.ocr_status == DocumentProcessingStatus.OCR_FAILED)
+
+        # If retrying a previously failed document, reserve quota slot before processing
+        if was_failed:
+            SubscriptionService.reserve_document_analysis_quota(db=db, user_id=user.id)
 
         file_bytes = storage_service.get_file_bytes(doc.storage_reference)
 
@@ -221,23 +279,55 @@ class DocumentService:
         db.commit()
 
         # Run OCR
-        ocr_result = ocr_service.process_document(
-            file_bytes=file_bytes,
-            mime_type=doc.mime_type,
-            document_type=doc.document_type,
-            filename=doc.original_filename,
-        )
+        try:
+            ocr_result = ocr_service.process_document(
+                file_bytes=file_bytes,
+                mime_type=doc.mime_type,
+                document_type=doc.document_type,
+                filename=doc.original_filename,
+            )
+        except Exception as exc:
+            safe_msg = sanitize_ocr_error_message(str(exc))
+            logger.error("OCR retry exception: %s", safe_msg)
+            ocr_result = OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"error": safe_msg},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"OCR execution failure: {safe_msg}",
+            )
 
-        doc.ocr_status = ocr_result.status
-        doc.ocr_extracted_text = ocr_result.extracted_text
-        doc.ocr_confidence = ocr_result.confidence
-        doc.ocr_metadata = ocr_result.metadata
-        doc.ocr_completed_at = ocr_result.completed_at
-        doc.manual_review_required = ocr_result.manual_review_required
-        doc.ocr_error_message = ocr_result.error_message
+        if ocr_result and ocr_result.status in [
+            DocumentProcessingStatus.OCR_COMPLETED,
+            DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED,
+        ]:
+            doc.ocr_status = ocr_result.status
+            doc.ocr_extracted_text = ocr_result.extracted_text
+            doc.ocr_confidence = ocr_result.confidence
+            doc.ocr_metadata = ocr_result.metadata
+            doc.ocr_completed_at = ocr_result.completed_at
+            doc.manual_review_required = ocr_result.manual_review_required
+            doc.ocr_error_message = ocr_result.error_message
+            db.commit()
+            db.refresh(doc)
+            if was_failed:
+                SubscriptionService.finalize_document_analysis(db=db, user_id=user.id)
+        else:
+            doc.ocr_status = DocumentProcessingStatus.OCR_FAILED
+            doc.ocr_extracted_text = ocr_result.extracted_text if ocr_result else None
+            doc.ocr_confidence = ocr_result.confidence if ocr_result else 0.0
+            doc.ocr_metadata = ocr_result.metadata if ocr_result else {}
+            doc.ocr_completed_at = ocr_result.completed_at if ocr_result else None
+            doc.manual_review_required = True
+            doc.ocr_error_message = (
+                ocr_result.error_message if ocr_result else "OCR execution failure"
+            )
+            db.commit()
+            db.refresh(doc)
+            if was_failed:
+                SubscriptionService.release_document_analysis_quota(db=db, user_id=user.id)
 
-        db.commit()
-        db.refresh(doc)
         return doc
 
 

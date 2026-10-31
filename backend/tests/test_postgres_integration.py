@@ -182,3 +182,139 @@ class TestPostgresLiveIntegration:
             db.rollback()
             db.close()
 
+
+class TestPostgresConcurrencyLive:
+    """Rigorous multi-threaded concurrency verification on live PostgreSQL (SEC-04, SEC-05, SEC-06).
+    
+    Uses concurrent.futures.ThreadPoolExecutor against a real PostgreSQL connection pool.
+    Skips cleanly if PostgreSQL daemon is offline.
+    """
+
+    @pytest.fixture(scope="class")
+    def pg_sessionmaker(self):
+        test_pg_url = os.environ.get("TEST_POSTGRES_URL", settings.DATABASE_URL)
+        try:
+            engine = create_engine(
+                test_pg_url,
+                connect_args={"connect_timeout": 2},
+                pool_pre_ping=True,
+                pool_size=10,
+                max_overflow=5,
+            )
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            from sqlalchemy.orm import sessionmaker
+            return sessionmaker(bind=engine)
+        except Exception:
+            pytest.skip(
+                f"PostgreSQL server is not reachable at {test_pg_url}. "
+                "Skipping live PostgreSQL concurrency tests."
+            )
+
+    def test_concurrent_monthly_quota_record_initialization(self, pg_sessionmaker):
+        """Verify 5 concurrent threads initializing UserMonthlyQuota record for the same user."""
+        from concurrent.futures import ThreadPoolExecutor
+        from app.services.subscription_service import SubscriptionService
+
+        db_init = pg_sessionmaker()
+        test_user = User(
+            id=uuid.uuid4(),
+            role="citizen",
+            mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+            is_active=True,
+        )
+        db_init.add(test_user)
+        db_init.commit()
+        db_init.close()
+
+        def init_quota(idx):
+            db = pg_sessionmaker()
+            try:
+                rec = SubscriptionService.get_or_create_monthly_quota_record(db, test_user.id, for_update=True)
+                return rec is not None
+            finally:
+                db.close()
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(executor.map(init_quota, range(5)))
+
+        assert all(results)
+        # Verify exactly one record exists in DB
+        db_check = pg_sessionmaker()
+        now = datetime.now(timezone.utc)
+        ym = f"{now.year:04d}-{now.month:02d}"
+        from app.models.subscription import UserMonthlyQuota
+        records = db_check.query(UserMonthlyQuota).filter(
+            UserMonthlyQuota.user_id == test_user.id,
+            UserMonthlyQuota.year_month == ym,
+        ).all()
+        assert len(records) == 1
+        db_check.close()
+
+    def test_concurrent_document_quota_reservations_respect_limit(self, pg_sessionmaker):
+        """Citizen has limit 3, currently used 2. 5 concurrent requests try to reserve the last slot."""
+        from concurrent.futures import ThreadPoolExecutor
+        from app.services.subscription_service import SubscriptionService
+        from app.models.document import DocumentMetadata, DocumentProcessingStatus
+
+        db_init = pg_sessionmaker()
+        test_user = User(
+            id=uuid.uuid4(),
+            role="citizen",
+            mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+            is_active=True,
+        )
+        db_init.add(test_user)
+        db_init.commit()
+
+        # Seed 2 completed documents
+        for i in range(2):
+            doc = DocumentMetadata(
+                id=uuid.uuid4(),
+                user_id=test_user.id,
+                document_type="income_certificate",
+                original_filename=f"doc_{i}.pdf",
+                storage_reference=f"/vault/{test_user.id}/doc_{i}.pdf",
+                mime_type="application/pdf",
+                file_size=1024,
+                ocr_status=DocumentProcessingStatus.OCR_COMPLETED,
+            )
+            db_init.add(doc)
+        db_init.commit()
+        db_init.close()
+
+        def try_reserve(idx):
+            db = pg_sessionmaker()
+            try:
+                SubscriptionService.reserve_document_analysis_quota(db, test_user.id)
+                # Create in-flight doc
+                doc_in_flight = DocumentMetadata(
+                    id=uuid.uuid4(),
+                    user_id=test_user.id,
+                    document_type="income_certificate",
+                    original_filename=f"concurrent_{idx}.pdf",
+                    storage_reference=f"/vault/{test_user.id}/concurrent_{idx}.pdf",
+                    mime_type="application/pdf",
+                    file_size=1024,
+                    ocr_status=DocumentProcessingStatus.PROCESSING,
+                )
+                db.add(doc_in_flight)
+                db.commit()
+                return "SUCCESS"
+            except Exception as e:
+                db.rollback()
+                if "403" in str(e) or "quota reached" in str(e).lower():
+                    return "BLOCKED_QUOTA"
+                return f"ERROR: {e}"
+            finally:
+                db.close()
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            outcomes = list(executor.map(try_reserve, range(5)))
+
+        # Exactly 1 request should succeed to reach limit 3, exactly 4 should be BLOCKED_QUOTA
+        success_count = outcomes.count("SUCCESS")
+        blocked_count = outcomes.count("BLOCKED_QUOTA")
+        assert success_count == 1
+        assert blocked_count == 4
+
