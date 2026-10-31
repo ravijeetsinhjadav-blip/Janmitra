@@ -1,6 +1,6 @@
 name: janmitra_assist
 description: "JanMitra Assist - AI-Powered Government Service Eligibility and Document Intelligence System"
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -12,6 +12,8 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_test:
@@ -23,4 +25,3 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
-

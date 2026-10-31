@@ -12,6 +12,10 @@ sqlalchemy>=2.0.36
 psycopg[binary]>=3.2.3
 alembic>=1.14.0
 
+# Security & Authentication (Phase 3)
+pyjwt[crypto]>=2.9.0
+bcrypt>=4.2.0
+
 # Testing & HTTP Client
 httpx>=0.28.0
 pytest>=8.3.0

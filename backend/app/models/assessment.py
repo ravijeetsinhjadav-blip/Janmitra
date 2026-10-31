@@ -67,3 +67,4 @@ class Assessment(Base):
 
     def __repr__(self) -> str:
         return f"<Assessment id={self.id} user_id={self.user_id} score={self.overall_readiness_score}>"
+

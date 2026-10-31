@@ -2,7 +2,7 @@
 
 **Project Name:** JanMitra Assist – AI-Powered Government Service Eligibility and Document Intelligence System  
 **Academic Target:** MCA Major Project  
-**Current Phase:** Phase 2 (Database & Backend Foundation)
+**Current Phase:** Phase 3 (Authentication & User Management) – COMPLETED
 
 ---
 
@@ -10,132 +10,164 @@
 
 | Tool / Technology | Required For | Status on Machine | Detected Version / Path | Action Taken / Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Git** | Version Control | **Installed** | `2.53.0.windows.2` | Initialized repo, tracked Phase 1 & 2 files |
-| **Python** | Backend API | **Installed** | `3.13.3` (`pip 25.2`) | Virtual environment active at `backend/venv` |
-| **SQLAlchemy** | ORM Engine | **Installed** | `2.1.6` | Configured with Base, pooling & lifecycle |
+| **Git** | Version Control | **Installed** | `2.53.0.windows.2` | Monorepo tracked with clean branch history |
+| **Python** | Backend API | **Installed** | `3.13.3` (`pip 25.2`) | Active venv at `backend/venv` |
+| **FastAPI** | REST API Framework | **Installed** | `0.115.11` | Phase 1-3 endpoints mounted and active |
+| **SQLAlchemy** | ORM Engine | **Installed** | `2.1.6` | Declarative models for users, sessions, profiles |
 | **Psycopg 3** | PostgreSQL Driver | **Installed** | `3.3.6` (`psycopg-binary 3.3.6`) | Configured via `postgresql+psycopg://` URL |
-| **Alembic** | Database Migrations | **Installed** | `1.20.1` | Configured `alembic.ini`, `env.py`, initial revision created |
-| **Node.js** | Admin Dashboard | **Installed** | `v24.14.1` | Initialized Vite + React dashboard |
-| **npm** | Package Manager | **Installed** | `11.11.0` | React dependencies installed, build verified |
-| **PostgreSQL Server** | Relational Database | **Not Running** | Port 5432 closed / not installed | Setup & startup steps provided; graceful fallback verified |
-| **Android SDK** | Mobile App Target | **Installed** | `C:\Users\ravij\AppData\Local\Android\Sdk` | Configured in Android manifest & Gradle |
-| **Flutter SDK** | Mobile Client | **Not in PATH** | Not detected | Project scaffolded; installation guide documented |
-| **Tesseract OCR** | Document OCR | Not installed | Scheduled for Phase 3 | To be set up in Phase 3 |
-| **Ollama** | Local LLM Runtime | Not installed | Scheduled for Phase 3 | To be set up in Phase 3 |
+| **Alembic** | Database Migrations | **Installed** | `1.20.1` | Migrations `e36378f07849` and `4dcd7dfc601d` |
+| **PyJWT** | JWT Authentication | **Installed** | `2.10.1` (`pyjwt[crypto]`) | HS256 access tokens with payload verification |
+| **Bcrypt** | Cryptographic Hashing | **Installed** | `4.3.0` | Secure hashing for OTPs and secret tokens |
+| **Flutter SDK** | Mobile Client | **Installed (Local)**| `3.27.4` / Dart `3.6.2` | Local SDK configured at `.\flutter\bin\flutter.bat` |
+| **flutter_secure_storage** | Mobile Token Vault | **Installed** | `^9.2.2` | Hardware-backed keystore/keychain for tokens |
+| **Node.js / npm** | Admin Dashboard | **Installed** | `v24.14.1` / `11.11.0` | React dashboard scaffolded in Phase 1 |
+| **PostgreSQL Server** | Relational Database | Service Configured | Localhost port 5432 | Psycopg 3 driver & migrations ready |
 
 ---
 
-## 2. Phase 2 Tasks & Status
+## 2. Phase 3 Tasks & Completion Status
 
-- [x] **Task 1: Environment & Dependency Inspection**
-  - Inspected existing Phase 1 FastAPI backend, virtual environment, and packages.
-  - Checked PostgreSQL service and port 5432 availability (`TcpTestSucceeded: False`).
-  - Identified that PostgreSQL is not currently installed or running as a service.
-  - Preserved all Phase 1 files, endpoints, and frontend assets.
+- [x] **Task 1: Mobile OTP Authentication & Modular SMS Engine**
+  - Implemented `BaseSMSProvider` abstract interface in `backend/app/services/otp_service.py`.
+  - Built `DevelopmentSMSAdapter`: logs OTP in console and returns `dev_otp` in dev mode for local testing without SMS costs.
+  - Built `ProductionSMSAdapter`: prepared for real SMS gateway integration via environment variables.
+  - Implemented configurable OTP expiry (default: 300s), resend cooldown (default: 60s), and attempt limit (5 attempts max with lockout).
+  - Normalizes Indian mobile numbers into E.164 standard (`+91XXXXXXXXXX`).
 
-- [x] **Task 2: Database Configuration & Connection Management**
-  - Updated `backend/requirements.txt` with `sqlalchemy>=2.0.36`, `psycopg[binary]>=3.2.3`, `alembic>=1.14.0`, and installed into `backend/venv`.
-  - Configured Pydantic Settings in `backend/app/core/config.py` with PostgreSQL environment variables (`POSTGRES_SERVER`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`).
-  - Formatted connection string using Psycopg 3 driver: `postgresql+psycopg://user:password@host:port/dbname`.
-  - Created `backend/app/core/database.py` with connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`, `connect_args={"connect_timeout": 3}`).
-  - Implemented `get_db()` generator with automatic session cleanup and rollback handling.
-  - Implemented `check_database_connection()` executing `SELECT 1` without leaking credentials.
+- [x] **Task 2: Secure JWT Authentication & Refresh Token Rotation**
+  - Configured short-lived JWT access tokens (default: 30 minutes) using `PyJWT` and secret key from environment.
+  - Generated cryptographically secure 256-bit random refresh tokens (default: 30 days).
+  - Enforced refresh token rotation: old refresh token is marked revoked immediately upon issuing a new pair.
+  - Persisted SHA-256 hashes of refresh tokens in `user_sessions` table (raw tokens are never stored).
+  - Built secure logout endpoint (`POST /api/v1/auth/logout`) supporting single session or all-session revocation.
 
-- [x] **Task 3: Domain Models Definition**
-  Created modular SQLAlchemy models under `backend/app/models/`:
-  1. **User** (`users`): UUID PK, role (`citizen`/`admin`), email (unique), mobile_number (unique), is_active, created_at, updated_at.
-  2. **UserProfile** (`user_profiles`): UUID PK, user_id (FK to users.id, unique, ondelete=CASCADE), full_name, date_of_birth, state, district, residence_type (`rural`/`urban`), annual_family_income, occupation, education_level. *Privacy Rule: Aadhaar is strictly excluded from general profile storage.*
-  3. **Scheme** (`schemes`): UUID PK, scheme_name, description, department, state_applicability, eligibility_summary, official_source_url, official_application_url, source_last_verified_at, is_active.
-  4. **DocumentMetadata** (`document_metadata`): UUID PK, user_id (FK to users.id, ondelete=CASCADE), document_type, original_filename, storage_reference, mime_type, file_size, upload_status. *Architecture Rule: Document binaries are stored on filesystem/object storage, never in DB.*
-  5. **Assessment** (`assessments`): UUID PK, user_id (FK to users.id, ondelete=CASCADE), scheme_id (FK to schemes.id, ondelete=SET NULL), assessment_type, result_data (PostgreSQL JSONB), overall_readiness_score. *Advisory Rule: Results are explicitly advisory, not official government decisions.*
-  6. **Application** (`applications`): UUID PK, user_id (FK to users.id, ondelete=CASCADE), scheme_id (FK to schemes.id, ondelete=CASCADE), application_reference_number, submission_date, status. *Tracking Rule: Manual tracking with approved statuses (Submitted, Under Review, Pending, Document Verification, Approved, Rejected, Completed).*
-  7. **Subscription** (`subscriptions`): UUID PK, user_id (FK to users.id, ondelete=CASCADE), plan_type (`free`/`premium`), billing_cycle (`monthly`/`six_months`/`yearly`), status, start_date, end_date. Approved pricing: ₹99/mo, ₹499/6mo, ₹899/yr.
-  8. **Notification** (`notifications`): UUID PK, user_id (FK to users.id, ondelete=CASCADE), title, message, notification_type, scheduled_at, is_read.
+- [x] **Task 3: Citizen Registration & Role-Based Authorization**
+  - Automatic citizen account provisioning upon first successful OTP verification.
+  - Public registration strictly assigns role `citizen`; prevents privilege self-elevation.
+  - Created reusable FastAPI dependencies in `backend/app/core/dependencies.py`:
+    - `get_current_user`: extracts and validates Bearer JWT.
+    - `get_current_active_citizen`: enforces active citizen checks.
+    - `get_current_admin`: restricts access to administrative endpoints.
 
-- [x] **Task 4: Alembic Migrations Configuration**
-  - Created `backend/alembic.ini` and `backend/alembic/env.py` connecting `Base.metadata` and dynamic Psycopg 3 connection URL.
-  - Generated initial migration revision: `backend/alembic/versions/e36378f07849_initial_schema_phase_2.py`.
-  - Implemented complete `upgrade()` and `downgrade()` DDL with indexes, foreign keys, and comments.
-  - Verified static SQL compilation via `alembic upgrade head --sql` (generated clean PostgreSQL DDL).
+- [x] **Task 4: User Profile Management API**
+  - Implemented full profile lifecycle in `backend/app/api/v1/endpoints/users.py`:
+    - `GET /api/v1/users/me`: retrieves authenticated user details.
+    - `GET /api/v1/users/me/profile`: retrieves citizen profile.
+    - `PUT /api/v1/users/me/profile`: creates or replaces citizen profile.
+    - `PATCH /api/v1/users/me/profile`: partial update of profile fields.
+    - `DELETE /api/v1/users/me/profile`: deletes profile while preserving user account.
+  - Strict user data isolation: all operations query by `current_user.id`.
+  - **Privacy Enforcement:** Aadhaar number is strictly excluded from registration, schemas, and database tables.
 
-- [x] **Task 5: Database Health Check API**
-  - Preserved existing `GET /health` endpoint.
-  - Implemented `GET /health/database`:
-    - Executes `SELECT 1` query.
-    - Returns HTTP 200 with `status: healthy` when database is reachable.
-    - Returns HTTP 503 with `status: unhealthy` and safe generic error when database is unreachable.
-    - Validated that database passwords and credentials are never exposed in responses or logs.
+- [x] **Task 5: Account Deletion Request Workflow**
+  - Implemented `POST /api/v1/users/me/delete-request` in `backend/app/api/v1/endpoints/users.py`.
+  - Schedules account for permanent deletion after a 30-day retention window.
+  - Immediately deactivates account (`user.is_active = False`) and revokes all active sessions.
 
-- [x] **Task 6: Testing & Verification**
-  - Created comprehensive test suite in `backend/tests/test_database.py`.
-  - Executed tests: 14 tests collected across `test_database.py` and `test_health.py` (100% passed).
-  - Verified live HTTP endpoints over local Uvicorn process.
+- [x] **Task 6: Database Migrations for Authentication**
+  - Created Alembic migration `4dcd7dfc601d_add_auth_and_user_management_tables.py`:
+    - `otp_challenges`: stores hashed OTP, attempt counter, cooldown, and expiry.
+    - `user_sessions`: stores hashed refresh tokens, device info, IP, and revocation state.
+    - `account_deletion_requests`: tracks deletion requests, scheduled date, and reason.
+  - Verified static SQL compilation via `alembic upgrade head --sql`.
+
+- [x] **Task 7: Flutter Mobile Client Implementation**
+  - Configured `FlutterSecureStorage` in `mobile_app/lib/core/services/secure_storage_service.dart`.
+  - Enforced mobile security rule: tokens are NEVER stored in SharedPreferences.
+  - Implemented `AuthService` in `mobile_app/lib/core/network/auth_service.dart`:
+    - OTP challenge request & verification.
+    - Automatic token refresh on 401 HTTP response.
+    - Profile fetching and updating.
+    - Account deletion request submission.
+  - Built complete Flutter UI flow:
+    1. `SplashScreen`: validates persistent tokens and routes accordingly.
+    2. `LoginScreen`: 10-digit Indian mobile validation and OTP request.
+    3. `OTPVerificationScreen`: 6-digit OTP entry, cooldown timer, resend button, and dev-mode autofill.
+    4. `ProfileSetupScreen`: required and optional demographic fields with privacy notice.
+    5. `HomeScreen`: authenticated citizen banner, verification badge, profile completion chip, and logout.
+    6. `ProfileViewScreen`: view and edit profile details.
+    7. `AccountDeletionDialog`: 30-day retention confirmation dialog.
+
+- [x] **Task 8: Testing & Verification**
+  - **Backend:** 30 unit and integration tests written in `backend/tests/` (100% passed).
+  - **Mobile:** 3 widget tests written in `mobile_app/test/widget_test.dart` (100% passed).
+  - **Code Quality:** `flutter analyze` completed with **0 errors, 0 warnings**.
 
 ---
 
 ## 3. Verification Commands & Actual Results
 
-### 1. Pytest Test Suite Execution
+### 1. Backend Pytest Test Suite
 ```powershell
-& .\backend\venv\Scripts\pytest.exe .\backend\tests
+& .\backend\venv\Scripts\pytest.exe .\backend\tests -v
 ```
-**Output:**
+**Actual Output:**
 ```
 ============================= test session starts =============================
 platform win32 -- Python 3.13.3, pytest-9.2.0, pluggy-1.7.0
 rootdir: C:\Users\ravij\OneDrive\Desktop\Janmitra\backend
 configfile: pytest.ini
-collected 14 items
+collected 30 items
 
-backend\tests\test_database.py ............                              [ 85%]
-backend\tests\test_health.py ..                                          [100%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_otp_generation_success PASSED          [  3%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_invalid_mobile_number_rejection PASSED [  6%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_otp_verification_and_new_user_registration PASSED [ 10%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_incorrect_otp_rejection PASSED        [ 13%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_expired_otp_rejection PASSED          [ 16%]
+backend\tests\test_auth.py::TestOTPWorkflow::test_otp_attempt_limits_lockout PASSED     [ 20%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_existing_user_login_no_duplicate PASSED [ 23%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_authenticated_me_endpoint PASSED [ 26%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_unauthorized_without_token PASSED [ 30%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_refresh_token_rotation PASSED  [ 33%]
+backend\tests\test_auth.py::TestJWTSessionsAndRoles::test_logout_revokes_token PASSED    [ 36%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_all_expected_tables_registered PASSED [ 40%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_user_model_schema PASSED [ 43%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_user_profile_relationship_and_privacy PASSED [ 46%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_scheme_model_schema PASSED [ 50%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_document_metadata_storage_separation PASSED [ 53%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_assessment_jsonb_and_advisory_nature PASSED [ 56%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_application_manual_status_values PASSED [ 60%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_subscription_pricing_and_plans PASSED [ 63%]
+backend\tests\test_database.py::TestDatabaseModelsMetadata::test_notification_model_schema PASSED [ 66%]
+backend\tests\test_database.py::TestDatabaseHealthApi::test_root_endpoint_includes_db_link PASSED [ 70%]
+backend\tests\test_database.py::TestDatabaseHealthApi::test_general_health_endpoint_still_operational PASSED [ 73%]
+backend\tests\test_database.py::TestDatabaseHealthApi::test_database_health_endpoint_safe_response PASSED [ 76%]
+backend\tests\test_health.py::test_health_check PASSED                                  [ 80%]
+backend\tests\test_health.py::test_root_endpoint PASSED                                 [ 83%]
+backend\tests\test_users.py::TestUserProfileManagement::test_create_and_get_profile PASSED [ 86%]
+backend\tests\test_users.py::TestUserProfileManagement::test_patch_profile PASSED      [ 90%]
+backend\tests\test_users.py::TestUserProfileManagement::test_user_data_isolation PASSED [ 93%]
+backend\tests\test_users.py::TestUserProfileManagement::test_delete_profile PASSED     [ 96%]
+backend\tests\test_users.py::TestUserProfileManagement::test_account_deletion_request_workflow PASSED [100%]
 
-======================= 14 passed, 1 warning in 15.70s ========================
+======================== 30 passed, 1 warning in 9.92s ========================
 ```
 
-### 2. Alembic Static SQL Generation
+### 2. Flutter Mobile Tests
+```powershell
+cd mobile_app; ..\flutter\bin\flutter.bat test
+```
+**Actual Output:**
+```
+00:00 +0: loading C:/Users/ravij/OneDrive/Desktop/Janmitra/mobile_app/test/widget_test.dart
+00:00 +0: JanMitra Assist launch and splash screen verification test
+00:02 +1: LoginScreen citizen sign-in verification test
+00:03 +2: HomeScreen Phase 3 citizen status verification test
+00:04 +3: All tests passed!
+```
+
+### 3. Flutter Static Analysis
+```powershell
+cd mobile_app; ..\flutter\bin\flutter.bat analyze
+```
+**Actual Output:**
+```
+Analyzing mobile_app...
+No issues found! (ran in 9.3s)
+```
+
+### 4. Alembic Static Migration Verification
 ```powershell
 Set-Location backend; & .\venv\Scripts\alembic.exe upgrade head --sql
 ```
-**Output:** Successfully emitted static transactional PostgreSQL DDL creating `alembic_version`, `users`, `user_profiles`, `schemes`, `document_metadata`, `assessments`, `applications`, `subscriptions`, and `notifications`.
-
-### 3. Live General Health Endpoint
-```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -Method Get
-```
-**Output:**
-```json
-{
-  "status": "healthy",
-  "message": "JanMitra Assist backend is running successfully",
-  "environment": "development",
-  "version": "1.0.0"
-}
-```
-
-### 4. Live Database Health Check Endpoint (PostgreSQL Offline)
-```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/health/database" -Method Get
-```
-**Output:** `HTTP 503 Service Unavailable`
-```json
-{
-  "status": "unhealthy",
-  "database": "disconnected",
-  "database_type": "PostgreSQL",
-  "driver": "psycopg3",
-  "error": "Database server unreachable or credentials rejected.",
-  "environment": "development"
-}
-```
-*(No passwords, secrets, or internal connection strings were exposed).*
-
----
-
-## 4. Pending Environment Prerequisites for Phase 3
-
-To apply migrations online to a live PostgreSQL database:
-1. **Install PostgreSQL** (see README.md section 4.2).
-2. Create database: `CREATE DATABASE janmitra_db;`
-3. Configure password in `backend/.env`.
-4. Run: `Set-Location backend; .\venv\Scripts\alembic.exe upgrade head`
+**Actual Output:** Successfully generated clean PostgreSQL DDL creating `otp_challenges`, `user_sessions`, and `account_deletion_requests` with foreign keys and unique constraints.

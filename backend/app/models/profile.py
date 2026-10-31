@@ -89,3 +89,4 @@ class UserProfile(Base):
 
     def __repr__(self) -> str:
         return f"<UserProfile id={self.id} user_id={self.user_id} name={self.full_name}>"
+

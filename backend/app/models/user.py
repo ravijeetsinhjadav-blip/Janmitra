@@ -9,7 +9,7 @@ class User(Base):
     """User account entity.
     
     Serves as the root citizen or admin identity.
-    Note: Password authentication is explicitly deferred to later phases.
+    Note: Password authentication is replaced with secure mobile OTP authentication in Phase 3.
     """
     __tablename__ = "users"
 
@@ -93,6 +93,16 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    sessions = relationship(
+        "UserSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    deletion_requests = relationship(
+        "AccountDeletionRequest",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
-        return f"<User id={self.id} role={self.role} email={self.email}>"
+        return f"<User id={self.id} role={self.role} mobile={self.mobile_number}>"

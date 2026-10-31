@@ -81,3 +81,4 @@ class DocumentMetadata(Base):
 
     def __repr__(self) -> str:
         return f"<DocumentMetadata id={self.id} user_id={self.user_id} type='{self.document_type}'>"
+

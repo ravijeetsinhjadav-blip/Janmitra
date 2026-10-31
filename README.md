@@ -295,17 +295,115 @@ Once PostgreSQL is running:
 
 ### 7.3 Run All Automated Tests
 ```powershell
-& .\backend\venv\Scripts\pytest.exe .\backend\tests
+& .\backend\venv\Scripts\pytest.exe .\backend\tests -v
 ```
-Executes 14 unit and integration tests covering:
-- Metadata table registrations for all 8 entities
-- Column constraints, UUID types, JSONB types
-- One-to-one and one-to-many relationships
-- Health check endpoints and secure error handling
+Executes 30 comprehensive unit and integration tests covering:
+- Metadata table registrations for all domain entities
+- Column constraints, UUID types, and JSONB schemas
+- OTP challenge generation, rate limiting, and verification
+- Citizen registration, login, and non-elevation security
+- JWT token issuing, expiry, and refresh token rotation
+- Logout and session revocation
+- Profile creation, updating, retrieval, and isolation
+- Account deletion requests with 30-day retention
+- Health check endpoints and safe error handling
 
 ---
 
-## 8. Common Troubleshooting
+## 8. Authentication & User Management (Phase 3)
+
+### 8.1 Authentication Architecture & Flow
+
+JanMitra Assist implements a **mobile number OTP-based authentication architecture** tailored for Indian citizens:
+
+1. **OTP Challenge (`POST /api/v1/auth/send-otp`)**:
+   - Accepts 10-digit Indian mobile number (`+91` or 10 digits).
+   - Generates cryptographically secure 6-digit numeric OTP.
+   - Stores SHA-256 hash in `otp_challenges` with 5-minute expiry.
+   - Enforces a 60-second resend cooldown and 5-attempt brute-force limit.
+   - **Modular SMS Adapter**: Uses `DevelopmentSMSAdapter` locally (logs OTP and returns `dev_otp` in development mode) to eliminate SMS fees during testing, while `ProductionSMSAdapter` is ready for external SMS gateways.
+
+2. **OTP Verification & Citizen Provisioning (`POST /api/v1/auth/verify-otp`)**:
+   - Verifies OTP challenge.
+   - If user does not exist: automatically provisions a new `User` with role `citizen`.
+   - If user already exists: verifies identity and prevents duplicate user creation.
+   - Issues short-lived JWT access token (30 minutes) and 256-bit cryptographically random refresh token (30 days).
+   - Stores SHA-256 hash of refresh token in `user_sessions`.
+
+3. **Secure Refresh Token Rotation (`POST /api/v1/auth/refresh`)**:
+   - Accepts raw refresh token.
+   - Verifies hash against active `user_sessions`.
+   - **Rotation:** Immediately revokes previous refresh token and issues a fresh pair.
+   - Prevents replay attacks and persistent token hijacking.
+
+4. **Session Revocation & Logout (`POST /api/v1/auth/logout`)**:
+   - Invalidates active refresh token (or all sessions for the user).
+   - Clears credentials from local storage.
+
+5. **Citizen Profile Lifecycle (`/api/v1/users/me/profile`)**:
+   - `GET`: Fetches authenticated citizen's demographic details.
+   - `PUT`: Creates or updates profile (Full Name, Date of Birth, State, District, Residence Type, Income, Occupation, Education).
+   - `PATCH`: Partial profile updates.
+   - `DELETE`: Clears profile without deleting the user account.
+   - **Privacy Rule:** Aadhaar numbers are strictly excluded from registration, schemas, and storage.
+
+6. **Account Deletion Request (`POST /api/v1/users/me/delete-request`)**:
+   - Initiates a scheduled 30-day retention countdown.
+   - Immediately deactivates account (`is_active = False`) and revokes all active sessions.
+
+### 8.2 Phase 3 API Endpoint Reference
+
+| Method | Endpoint | Auth Required | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/api/v1/auth/send-otp` | No | Request 6-digit OTP challenge for mobile number |
+| `POST` | `/api/v1/auth/verify-otp` | No | Verify OTP, provision citizen, return JWT tokens |
+| `POST` | `/api/v1/auth/refresh` | No | Rotate refresh token and issue new token pair |
+| `POST` | `/api/v1/auth/logout` | Bearer JWT | Revoke active session(s) and sign out |
+| `GET` | `/api/v1/auth/me` | Bearer JWT | Retrieve authenticated citizen identity |
+| `GET` | `/api/v1/users/me` | Bearer JWT | Retrieve user identity and profile summary |
+| `GET` | `/api/v1/users/me/profile` | Bearer JWT | Retrieve citizen profile details |
+| `PUT` | `/api/v1/users/me/profile` | Bearer JWT | Create or replace citizen profile |
+| `PATCH` | `/api/v1/users/me/profile` | Bearer JWT | Partial update of citizen profile |
+| `DELETE` | `/api/v1/users/me/profile` | Bearer JWT | Clear citizen profile |
+| `POST` | `/api/v1/users/me/delete-request` | Bearer JWT | Request account deletion (30-day retention) |
+
+---
+
+## 9. Flutter Mobile Application (Phase 3)
+
+### 9.1 Secure Storage Architecture
+- In strict adherence to mobile security best practices, JWT access and refresh tokens are **never stored in SharedPreferences**.
+- All tokens, keys, and session metadata are persisted using **`FlutterSecureStorage`** backed by Android Keystore and iOS Keychain.
+
+### 9.2 Mobile Screen Workflows
+1. **`SplashScreen`**: Checks persistent session; auto-routes to `HomeScreen` if token valid or `LoginScreen` if expired.
+2. **`LoginScreen`**: Input validation for 10-digit Indian numbers (`+91`), request OTP challenge.
+3. **`OTPVerificationScreen`**: 6-digit entry with resend cooldown countdown and dev-mode autofill support.
+4. **`ProfileSetupScreen`**: Form to complete required and optional citizen demographics with clear Aadhaar exclusion notice.
+5. **`HomeScreen`**: Displays citizen verification badge, profile completion status chip, quick profile access, and sign-out.
+6. **`ProfileViewScreen`**: View and edit citizen details.
+7. **`AccountDeletionDialog`**: Confirmation dialog explaining the 30-day data retention period.
+
+### 9.3 Running Flutter Tests
+```powershell
+cd mobile_app
+..\flutter\bin\flutter.bat test
+```
+All 3 widget tests pass:
+- App launch & splash screen verification
+- Citizen sign-in & validation UI
+- Home screen citizen status & navigation
+
+### 9.4 Running Flutter Static Analysis
+```powershell
+cd mobile_app
+..\flutter\bin\flutter.bat analyze
+```
+Verified **0 issues found**.
+
+---
+
+## 10. Common Troubleshooting
 
 ### 1. `OperationalError: connection to server at "localhost", port 5432 failed`
 - **Cause:** PostgreSQL service is stopped or port 5432 is not listening.

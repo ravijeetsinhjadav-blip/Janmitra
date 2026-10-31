@@ -91,3 +91,4 @@ class Scheme(Base):
 
     def __repr__(self) -> str:
         return f"<Scheme id={self.id} name='{self.scheme_name}' state='{self.state_applicability}'>"
+

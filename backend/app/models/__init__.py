@@ -7,6 +7,9 @@ from app.models.assessment import Assessment
 from app.models.application import Application, APPLICATION_STATUSES
 from app.models.subscription import Subscription, PLAN_TYPES, BILLING_CYCLES
 from app.models.notification import Notification
+from app.models.otp import OTPChallenge
+from app.models.session import UserSession
+from app.models.account_deletion import AccountDeletionRequest
 
 __all__ = [
     "Base",
@@ -21,4 +24,7 @@ __all__ = [
     "PLAN_TYPES",
     "BILLING_CYCLES",
     "Notification",
+    "OTPChallenge",
+    "UserSession",
+    "AccountDeletionRequest",
 ]

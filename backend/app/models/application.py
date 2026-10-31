@@ -84,3 +84,4 @@ class Application(Base):
 
     def __repr__(self) -> str:
         return f"<Application id={self.id} user_id={self.user_id} scheme_id={self.scheme_id} status='{self.status}'>"
+

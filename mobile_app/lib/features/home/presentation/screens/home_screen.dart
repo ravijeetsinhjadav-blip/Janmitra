@@ -1,112 +1,149 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/network/auth_service.dart';
+import '../../../../core/services/secure_storage_service.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../profile/models/user_profile_model.dart';
+import '../../../profile/presentation/screens/profile_setup_screen.dart';
+import '../../../profile/presentation/screens/profile_view_screen.dart';
 import '../widgets/welcome_card.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(AppConstants.appName),
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final AuthService _authService = AuthService();
+  final SecureStorageService _storage = SecureStorageService();
+
+  String? _mobileNumber;
+  String _role = 'Citizen';
+  UserProfileModel? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCitizenData();
+  }
+
+  Future<void> _loadCitizenData() async {
+    final mobile = await _storage.getMobileNumber();
+    final role = await _storage.getUserRole();
+    try {
+      final profile = await _authService.getUserProfile();
+      if (mounted) {
+        setState(() {
+          _mobileNumber = mobile;
+          _role = (role ?? 'citizen').toUpperCase();
+          _profile = profile;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _mobileNumber = mobile;
+          _role = (role ?? 'citizen').toUpperCase();
+        });
+      }
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out of JanMitra Assist?'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: 'About',
-            onPressed: () {
-              showAboutDialog(
-                context: context,
-                applicationName: AppConstants.appName,
-                applicationVersion: AppConstants.appVersion,
-                applicationLegalese: 'MCA Major Project - Citizen Service System',
-              );
-            },
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+            child: const Text('Sign Out'),
           ),
         ],
       ),
-      body: SingleChildScrollView(
+    );
+
+    if (confirm == true) {
+      await _authService.logout();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  Widget _buildPhaseFeatureCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String phaseBadge,
+  }) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            const WelcomeCard(),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Phase 1 Architecture Status',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildStatusRow(
-                      icon: Icons.check_circle,
-                      iconColor: AppTheme.accentGreen,
-                      title: 'Backend Foundation',
-                      subtitle: 'FastAPI Health Check Endpoint Verified',
-                    ),
-                    const Divider(height: 16),
-                    _buildStatusRow(
-                      icon: Icons.check_circle,
-                      iconColor: AppTheme.accentGreen,
-                      title: 'Admin Dashboard',
-                      subtitle: 'React.js Console Verified',
-                    ),
-                    const Divider(height: 16),
-                    _buildStatusRow(
-                      icon: Icons.smartphone,
-                      iconColor: AppTheme.primaryBlue,
-                      title: 'Mobile Application',
-                      subtitle: 'Flutter (Dart) Foundation Scaffolded',
-                    ),
-                  ],
-                ),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
               ),
+              child: Icon(icon, color: Colors.grey.shade600, size: 28),
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Upcoming Phase Modules',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...AppConstants.upcomingFeatures.map(
-                      (feature) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.arrow_right, color: AppTheme.primaryBlue, size: 20),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                feature,
-                                style: const TextStyle(fontSize: 13, color: Colors.black87),
-                              ),
-                            ),
-                          ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Text(
+                          phaseBadge,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
               ),
             ),
           ],
@@ -115,27 +152,173 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusRow({
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, color: iconColor, size: 22),
-        const SizedBox(width: 12),
-        Expanded(
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(AppConstants.appName),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle),
+            tooltip: 'Citizen Profile',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileViewScreen()),
+              );
+              _loadCitizenData();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sign Out',
+            onPressed: _handleSignOut,
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadCitizenData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              const WelcomeCard(),
+              const SizedBox(height: 16),
+              // Citizen Identity Status Card
+              Card(
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                radius: 20,
+                                child: const Icon(Icons.person, color: AppTheme.primaryBlue),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _profile?.fullName.isNotEmpty == true
+                                        ? _profile!.fullName
+                                        : 'Citizen User',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    _mobileNumber != null ? '+91 $_mobileNumber' : 'Mobile Verified',
+                                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.green.shade300),
+                            ),
+                            child: Text(
+                              _role,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _profile != null ? Icons.check_circle : Icons.warning_amber_rounded,
+                                size: 18,
+                                color: _profile != null ? AppTheme.accentGreen : Colors.orange,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _profile != null
+                                    ? 'Profile Completed'
+                                    : 'Profile Incomplete',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _profile != null ? AppTheme.accentGreen : Colors.orange.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              if (_profile != null) {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const ProfileViewScreen()),
+                                );
+                              } else {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                                );
+                              }
+                              _loadCitizenData();
+                            },
+                            child: Text(_profile != null ? 'View Profile' : 'Complete Now'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Upcoming Modules (Phases 4 - 8)',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildPhaseFeatureCard(
+                icon: Icons.search,
+                title: 'Government Scheme Discovery',
+                description: 'Search central and state schemes by ministry and benefits.',
+                phaseBadge: 'Phase 4',
+              ),
+              _buildPhaseFeatureCard(
+                icon: Icons.document_scanner,
+                title: 'Document Vault & OCR',
+                description: 'Upload required documents with on-device Tesseract OCR.',
+                phaseBadge: 'Phase 5',
+              ),
+              _buildPhaseFeatureCard(
+                icon: Icons.psychology,
+                title: 'AI Advisory & Readiness Report',
+                description: 'Ollama local Llama 3.2 1B advisory eligibility intelligence.',
+                phaseBadge: 'Phase 6',
+              ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
-

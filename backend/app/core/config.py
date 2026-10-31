@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
     PORT: int = 8000
 
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080"
     LOG_LEVEL: str = "INFO"
 
     # PostgreSQL Database Settings
@@ -29,6 +29,20 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
 
+    # JWT Authentication Settings (Phase 3)
+    JWT_SECRET_KEY: str = "janmitra_insecure_default_dev_secret_change_in_production_32bytes"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # OTP Authentication Settings (Phase 3)
+    OTP_LENGTH: int = 6
+    OTP_EXPIRE_SECONDS: int = 300  # 5 minutes
+    OTP_MAX_ATTEMPTS: int = 3
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_DEV_MODE: bool = True  # Returns development OTP for local testing
+    SMS_PROVIDER: str = "development"  # Options: 'development', 'production_sms'
+
     @property
     def cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
@@ -37,7 +51,6 @@ class Settings(BaseSettings):
     def sync_database_url(self) -> str:
         """Return the PostgreSQL connection string formatted for SQLAlchemy with Psycopg 3."""
         if self.DATABASE_URL:
-            # Ensure URL uses postgresql+psycopg driver if user provided raw postgresql://
             url = self.DATABASE_URL
             if url.startswith("postgresql://"):
                 url = url.replace("postgresql://", "postgresql+psycopg://", 1)
