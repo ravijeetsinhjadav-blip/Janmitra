@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, schemes, users, documents, advisory, assistance, subscriptions, payments
+from app.api.v1.endpoints import auth, schemes, users, documents, advisory, assistance, subscriptions, payments, applications
 
 api_router = APIRouter()
 
@@ -27,7 +27,6 @@ api_router.include_router(subscriptions.router, tags=["Subscriptions"])
 # Assisted Service & Razorpay Payments (Phase 7.2)
 api_router.include_router(payments.router, tags=["Payments & Checkout"])
 
-
-
-
+# Citizen Application Tracking Module (Phase 8.1)
+api_router.include_router(applications.router, prefix="/applications", tags=["Application Tracking"])
 
