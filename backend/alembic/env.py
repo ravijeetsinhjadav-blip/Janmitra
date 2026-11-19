@@ -22,8 +22,16 @@ if config.config_file_name is not None:
 # Set target metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with dynamic environment settings (Psycopg 3 URL)
-config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+# Override sqlalchemy.url with dynamic environment settings if not explicitly provided
+override_url = os.getenv("ALEMBIC_DATABASE_URL")
+if override_url:
+    if override_url.startswith("postgresql://"):
+        override_url = override_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif override_url.startswith("postgres://"):
+        override_url = override_url.replace("postgres://", "postgresql+psycopg://", 1)
+    config.set_main_option("sqlalchemy.url", override_url)
+else:
+    config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 
 
 def run_migrations_offline() -> None:
@@ -44,6 +52,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        render_as_batch=True,
     )
 
     with context.begin_transaction():
@@ -67,6 +76,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            render_as_batch=True,
         )
 
         with context.begin_transaction():

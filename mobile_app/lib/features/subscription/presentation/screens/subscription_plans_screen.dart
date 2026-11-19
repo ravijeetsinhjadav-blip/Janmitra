@@ -119,7 +119,11 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         },
       };
 
-      _checkoutAdapter.open(options);
+      if (order.isDevMode || order.keyId == 'rzp_test_janmitra_dev_key') {
+        _showDevModePaymentDialog(order);
+      } else {
+        _checkoutAdapter.open(options);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -133,6 +137,244 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         ),
       );
     }
+  }
+
+  void _showDevModePaymentDialog(RazorpayOrderModel order) {
+    String selectedMethod = 'UPI';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentGreen.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.shield_outlined,
+                        color: AppTheme.accentGreen, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Razorpay Payment Gateway',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        Text(
+                          'Secure 256-bit Encrypted Checkout',
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      if (mounted) setState(() => _isProcessingPayment = false);
+                    },
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              // Plan Summary Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'JanMitra Premium (${_selectedCycle == 'yearly' ? 'Annual Plan' : 'Monthly Plan'})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Order ID: ${order.orderId}',
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '₹${order.amountInr.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.accentGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Select Payment Method',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Payment method options
+              _buildPaymentOption(
+                icon: Icons.qr_code_2,
+                title: 'UPI (GPay / PhonePe / Paytm / BHIM)',
+                subtitle: 'Fastest payment directly from bank account',
+                value: 'UPI',
+                selected: selectedMethod,
+                onTap: () => setModalState(() => selectedMethod = 'UPI'),
+              ),
+              const SizedBox(height: 8),
+              _buildPaymentOption(
+                icon: Icons.credit_card,
+                title: 'Credit / Debit Card',
+                subtitle: 'Visa, MasterCard, RuPay, Maestro',
+                value: 'Card',
+                selected: selectedMethod,
+                onTap: () => setModalState(() => selectedMethod = 'Card'),
+              ),
+              const SizedBox(height: 8),
+              _buildPaymentOption(
+                icon: Icons.account_balance,
+                title: 'Net Banking',
+                subtitle: 'SBI, HDFC, ICICI, Bank of Baroda & 50+ banks',
+                value: 'NetBanking',
+                selected: selectedMethod,
+                onTap: () => setModalState(() => selectedMethod = 'NetBanking'),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  final paymentId =
+                      'pay_rzp_${DateTime.now().millisecondsSinceEpoch}';
+                  const signature = 'dev_mock_signature';
+                  _handlePaymentSuccess(PaymentSuccessResponse(
+                    paymentId,
+                    order.orderId,
+                    signature,
+                    {'method': selectedMethod.toLowerCase()},
+                  ));
+                },
+                child: Text(
+                  'Pay ₹${order.amountInr.toStringAsFixed(0)} Securely',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      if (mounted && _isProcessingPayment) {
+        setState(() => _isProcessingPayment = false);
+      }
+    });
+  }
+
+  Widget _buildPaymentOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String value,
+    required String selected,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = selected == value;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.teal.shade50 : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? AppTheme.accentGreen : Colors.grey.shade300,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon,
+                color: isSelected ? AppTheme.accentGreen : Colors.grey.shade700,
+                size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontSize: 13,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: isSelected ? AppTheme.accentGreen : Colors.grey.shade400,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
@@ -173,8 +415,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
 
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              PaymentSuccessScreen(verificationResult: verifyRes),
+          builder: (_) => PaymentSuccessScreen(verificationResult: verifyRes),
         ),
       );
 
@@ -191,6 +432,63 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _showCancelSubscriptionDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Premium Subscription?'),
+        content: const Text(
+          'Are you sure you want to cancel your JanMitra Premium subscription? '
+          'Your account will be reverted to the Free plan (up to 3 document analyses and 5 guidance sessions per month).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep Subscription'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm Cancellation'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => _isLoading = true);
+      try {
+        final updated = await _service.cancelSubscription();
+        if (mounted) {
+          setState(() {
+            _subscription = updated;
+            _isLoading = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Your subscription has been cancelled. Reverted to Free tier.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceFirst('Exception: ', '')),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -317,7 +615,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
           if (_plansResponse != null)
             ..._plansResponse!.plans.map(
               (plan) => _buildPlanCard(plan,
-                  isCurrent: (plan.planType == (isPremium ? 'premium' : 'free'))),
+                  isCurrent:
+                      (plan.planType == (isPremium ? 'premium' : 'free'))),
             ),
 
           const SizedBox(height: 16),
@@ -408,6 +707,38 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               used: sub.usage.aiGuidanceSessionsUsed,
               limit: sub.usage.aiGuidanceSessionsLimit,
             ),
+            if (isPrem) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.autorenew_rounded, size: 16),
+                    label: const Text(
+                      'Renew Subscription',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                    ),
+                    onPressed: _isProcessingPayment ? null : _handleUpgrade,
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.cancel_outlined,
+                        size: 16, color: Colors.red),
+                    label: const Text(
+                      'Cancel Subscription',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                    onPressed: _showCancelSubscriptionDialog,
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -604,15 +935,42 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: isPremium ? AppTheme.primaryBlue : Colors.black87,
+                        color:
+                            isPremium ? AppTheme.primaryBlue : Colors.black87,
                       ),
                     ),
                   ],
                 ),
-                if (isCurrent)
+                if (isCurrent && isPremium)
+                  ElevatedButton(
+                    onPressed: _isProcessingPayment ? null : _handleUpgrade,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accentGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                    ),
+                    child: _isProcessingPayment
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Renew / Extend',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  )
+                else if (isCurrent)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
                       borderRadius: BorderRadius.circular(4),

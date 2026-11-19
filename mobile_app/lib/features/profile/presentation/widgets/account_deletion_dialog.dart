@@ -67,7 +67,8 @@ class _AccountDeletionDialogState extends State<AccountDeletionDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 28),
+          Icon(Icons.warning_amber_rounded,
+              color: Colors.red.shade700, size: 28),
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
@@ -91,7 +92,8 @@ class _AccountDeletionDialogState extends State<AccountDeletionDialog> {
               ),
               child: const Text(
                 'Notice: Under JanMitra Assist privacy policy, your account will be deactivated immediately and all active sessions will be revoked. Your deletion request will be processed following statutory retention and verification guidelines.',
-                style: TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
+                style:
+                    TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
               ),
             ),
             const SizedBox(height: 16),
@@ -134,7 +136,8 @@ class _AccountDeletionDialogState extends State<AccountDeletionDialog> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 )
               : const Text('Confirm Deletion'),
         ),

@@ -31,6 +31,11 @@ class ApplicationCreate(BaseModel):
         default=False,
         description="Explicit request declaration confirming the portal did not issue a reference number."
     )
+    remarks: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+        description="Optional initial notes regarding submission (e.g. 'Submitted via CSC Center, physical receipt obtained')."
+    )
 
     @field_validator("submission_date")
     @classmethod
@@ -86,6 +91,11 @@ class ApplicationUpdate(BaseModel):
     )
     clear_reference_number: bool = False
     submission_date: Optional[datetime] = None
+    remarks: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+        description="Notes or remarks associated with this status update or general progress."
+    )
 
     @field_validator("status")
     @classmethod
@@ -123,7 +133,7 @@ class ApplicationUpdate(BaseModel):
             raise ValueError("PATCH payload cannot be empty. At least one field must be provided for update.")
 
         # 2. clear_reference_number alone is not a valid substantive update
-        substantive = {"status", "application_reference_number", "submission_date"}
+        substantive = {"status", "application_reference_number", "submission_date", "remarks"}
         if not any(f in fields for f in substantive):
             raise ValueError("PATCH payload must contain at least one updateable attribute.")
 
@@ -205,4 +215,102 @@ class ApplicationDeleteResponse(BaseModel):
         "the tracking record from JanMitra Assist. It does NOT withdraw, cancel, or modify "
         "your formal application on the official government portal."
     )
+
+
+class ApplicationStatusHistoryResponse(BaseModel):
+    """Immutable audit record representing a status update, remark, or detail change."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    application_id: uuid.UUID
+    previous_status: Optional[str] = None
+    new_status: str
+    event_type: str = Field(description="INITIAL_REGISTRATION, STATUS_UPDATE, REMARK_ADDED, or APPLICATION_DETAILS_UPDATED")
+    source: str = Field(description="USER_REPORTED or SYSTEM_MIGRATION")
+    remarks: Optional[str] = None
+    changed_by_user_id: Optional[uuid.UUID] = None
+    created_at: datetime
+
+
+class ApplicationStatusHistoryListResponse(BaseModel):
+    """Collection of chronological status updates with clear user-reported disclaimer."""
+    application_id: uuid.UUID
+    current_status: str
+    total: int
+    disclaimer: str = (
+        "Status history entries reflect manual updates entered by the citizen. "
+        "JanMitra Assist tracking records do not represent official government determinations."
+    )
+    history: List[ApplicationStatusHistoryResponse]
+
+
+class ReminderCreate(BaseModel):
+    """Citizen request payload to create a reminder for an application."""
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(..., min_length=1, max_length=200, description="Short summary of reminder task.")
+    reminder_date: datetime = Field(..., description="Scheduled date and time with timezone offset.")
+    description: Optional[str] = Field(default=None, max_length=2000, description="Detailed instructions or required items.")
+
+    @field_validator("reminder_date")
+    @classmethod
+    def validate_reminder_date(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
+            raise ValueError(
+                "Reminder date must include timezone offset (e.g. '2026-11-05T10:00:00+05:30' or '2026-11-05T04:30:00Z')."
+            )
+        return v.astimezone(timezone.utc)
+
+
+class ReminderUpdate(BaseModel):
+    """Citizen request payload to update reminder details or toggle completion."""
+    model_config = ConfigDict(extra="forbid")
+
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    reminder_date: Optional[datetime] = None
+    description: Optional[str] = Field(default=None, max_length=2000)
+    is_completed: Optional[bool] = None
+
+    @field_validator("reminder_date")
+    @classmethod
+    def validate_reminder_date(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is not None:
+            if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
+                raise ValueError("Reminder date must include timezone offset.")
+            return v.astimezone(timezone.utc)
+        return v
+
+    @model_validator(mode="after")
+    def validate_not_empty(self) -> "ReminderUpdate":
+        if not self.model_fields_set:
+            raise ValueError("PATCH payload cannot be empty. At least one field must be provided for update.")
+        return self
+
+
+class ReminderResponse(BaseModel):
+    """Response representing an application reminder."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    application_id: uuid.UUID
+    user_id: uuid.UUID
+    title: str
+    description: Optional[str] = None
+    reminder_date: datetime
+    is_completed: bool
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReminderListResponse(BaseModel):
+    """Collection of reminders."""
+    total: int
+    reminders: List[ReminderResponse]
+
+
+class ReminderDeleteResponse(BaseModel):
+    """Confirmation of reminder deletion."""
+    id: uuid.UUID
+    message: str = "Reminder deleted successfully."
 

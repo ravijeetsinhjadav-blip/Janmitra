@@ -55,7 +55,8 @@ class SubscriptionPlansResponseModel {
     return SubscriptionPlansResponseModel(
       plans: (json['plans'] as List<dynamic>?)
               ?.map(
-                (e) => SubscriptionPlanModel.fromJson(e as Map<String, dynamic>),
+                (e) =>
+                    SubscriptionPlanModel.fromJson(e as Map<String, dynamic>),
               )
               .toList() ??
           [],
@@ -86,12 +87,9 @@ class UsageQuotaModel {
   factory UsageQuotaModel.fromJson(Map<String, dynamic> json) {
     return UsageQuotaModel(
       aiDocumentAnalysesUsed: json['ai_document_analyses_used'] as int? ?? 0,
-      aiDocumentAnalysesLimit:
-          json['ai_document_analyses_limit'] as int? ?? 3,
-      aiGuidanceSessionsUsed:
-          json['ai_guidance_sessions_used'] as int? ?? 0,
-      aiGuidanceSessionsLimit:
-          json['ai_guidance_sessions_limit'] as int? ?? 5,
+      aiDocumentAnalysesLimit: json['ai_document_analyses_limit'] as int? ?? 3,
+      aiGuidanceSessionsUsed: json['ai_guidance_sessions_used'] as int? ?? 0,
+      aiGuidanceSessionsLimit: json['ai_guidance_sessions_limit'] as int? ?? 5,
       canAnalyzeDocument: json['can_analyze_document'] as bool? ?? true,
       canRequestGuidance: json['can_request_guidance'] as bool? ?? true,
       quotaResetDate: json['quota_reset_date'] != null

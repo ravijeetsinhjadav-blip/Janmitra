@@ -37,7 +37,6 @@ void main() {
       expect(doc.manualReviewRequired, isFalse);
       expect(doc.ocrConfidence, 0.945);
 
-
       final exportedJson = doc.toJson();
       expect(exportedJson['document_type'], 'income_certificate');
       expect(exportedJson['file_size'], 1048576);

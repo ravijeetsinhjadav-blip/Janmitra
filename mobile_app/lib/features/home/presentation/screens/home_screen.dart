@@ -12,8 +12,9 @@ import '../../../schemes/presentation/recommended_schemes_screen.dart';
 import '../../../schemes/presentation/scheme_discovery_screen.dart';
 import '../../../documents/presentation/screens/document_vault_screen.dart';
 import '../../../subscription/presentation/screens/subscription_plans_screen.dart';
+import '../../../applications/presentation/screens/applications_list_screen.dart';
+import '../../../notifications/presentation/screens/notification_history_screen.dart';
 import '../widgets/welcome_card.dart';
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -168,6 +169,18 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text(AppConstants.appName),
         actions: [
           IconButton(
+            key: const Key('home_notifications_bell_button'),
+            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Notifications',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const NotificationHistoryScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.account_circle),
             tooltip: 'Citizen Profile',
             onPressed: () async {
@@ -229,7 +242,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   Text(
                                     _mobileNumber != null
-                                        ? '+91 $_mobileNumber'
+                                        ? (_mobileNumber!.startsWith('+')
+                                            ? _mobileNumber!
+                                            : '+91 $_mobileNumber')
                                         : 'Mobile Verified',
                                     style: const TextStyle(
                                         fontSize: 13, color: Colors.black54),
@@ -329,7 +344,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                  side: BorderSide(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -341,10 +357,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                              color:
+                                  AppTheme.primaryBlue.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.account_balance, color: AppTheme.primaryBlue, size: 28),
+                            child: const Icon(Icons.account_balance,
+                                color: AppTheme.primaryBlue, size: 28),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -364,11 +382,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.green.shade50,
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.green.shade300),
+                                        border: Border.all(
+                                            color: Colors.green.shade300),
                                       ),
                                       child: Text(
                                         'Active',
@@ -384,7 +404,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Search central & state schemes, assess likely eligibility, and access official application portals.',
-                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
                                 ),
                               ],
                             ),
@@ -404,7 +425,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const SchemeDiscoveryScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const SchemeDiscoveryScreen()),
                                 );
                               },
                             ),
@@ -416,11 +439,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(Icons.auto_awesome, size: 16, color: Colors.amber),
+                              icon: const Icon(Icons.auto_awesome,
+                                  size: 16, color: Colors.amber),
                               label: const Text('My Matches'),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const RecommendedSchemesScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const RecommendedSchemesScreen()),
                                 );
                               },
                             ),
@@ -428,11 +454,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(Icons.history, size: 16, color: AppTheme.primaryBlue),
+                              icon: const Icon(Icons.history,
+                                  size: 16, color: AppTheme.primaryBlue),
                               label: const Text('Assessments'),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AssessmentHistoryScreen()),
                                 );
                               },
                             ),
@@ -458,7 +487,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: AppTheme.accentGreen.withValues(alpha: 0.3)),
+                  side: BorderSide(
+                      color: AppTheme.accentGreen.withValues(alpha: 0.3)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -470,10 +500,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: AppTheme.accentGreen.withValues(alpha: 0.1),
+                              color:
+                                  AppTheme.accentGreen.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.folder_shared, color: AppTheme.accentGreen, size: 28),
+                            child: const Icon(Icons.folder_shared,
+                                color: AppTheme.accentGreen, size: 28),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -493,11 +525,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.green.shade50,
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.green.shade300),
+                                        border: Border.all(
+                                            color: Colors.green.shade300),
                                       ),
                                       child: Text(
                                         'Active',
@@ -513,7 +547,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Securely store certificates and identity documents with Google Cloud Vision OCR intelligence.',
-                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
                                 ),
                               ],
                             ),
@@ -533,7 +568,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const DocumentVaultScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const DocumentVaultScreen()),
                                 );
                               },
                             ),
@@ -574,7 +611,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.purple.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.psychology, color: Colors.purple, size: 28),
+                            child: const Icon(Icons.psychology,
+                                color: Colors.purple, size: 28),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -594,11 +632,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.green.shade50,
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.green.shade300),
+                                        border: Border.all(
+                                            color: Colors.green.shade300),
                                       ),
                                       child: Text(
                                         'Active',
@@ -614,7 +654,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Personalized guidance, readiness scoring, document consistency cross-checks, and multilingual explanations.',
-                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
                                 ),
                               ],
                             ),
@@ -634,7 +675,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const RecommendedSchemesScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const RecommendedSchemesScreen()),
                                 );
                               },
                             ),
@@ -675,7 +718,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.teal.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.assignment_turned_in_outlined, color: Colors.teal, size: 28),
+                            child: const Icon(
+                                Icons.assignment_turned_in_outlined,
+                                color: Colors.teal,
+                                size: 28),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -695,11 +741,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.green.shade50,
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.green.shade300),
+                                        border: Border.all(
+                                            color: Colors.green.shade300),
                                       ),
                                       child: Text(
                                         'Active',
@@ -715,7 +763,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Interactive step-by-step preparation checklists, common mistakes warnings, document specifications, and official portal directions.',
-                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
                                 ),
                               ],
                             ),
@@ -727,7 +776,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              icon: const Icon(Icons.fact_check_outlined, size: 16),
+                              icon: const Icon(Icons.fact_check_outlined,
+                                  size: 16),
                               label: const Text('Prepare for Schemes'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal.shade700,
@@ -735,7 +785,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const SchemeDiscoveryScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const SchemeDiscoveryScreen()),
                                 );
                               },
                             ),
@@ -776,7 +828,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.amber.shade50,
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
+                            child: const Icon(Icons.workspace_premium,
+                                color: Colors.amber, size: 28),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -796,11 +849,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                     ),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.green.shade50,
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: Colors.green.shade300),
+                                        border: Border.all(
+                                            color: Colors.green.shade300),
                                       ),
                                       child: Text(
                                         'Active',
@@ -816,7 +871,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 4),
                                 const Text(
                                   'Explore Free vs Premium (₹99/mo or ₹799/yr), quota usage, and secure Razorpay payment checkout.',
-                                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
                                 ),
                               ],
                             ),
@@ -836,7 +892,121 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               onPressed: () {
                                 Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const SubscriptionPlansScreen()),
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const SubscriptionPlansScreen()),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Phase 8 Active Application Tracking Section
+              const Text(
+                'Application Tracking & Status History',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: AppTheme.primaryBlue.withAlpha(70)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryBlue.withAlpha(25),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                                Icons.assignment_turned_in_outlined,
+                                color: AppTheme.primaryBlue,
+                                size: 28),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Track Applications',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                            color: Colors.green.shade300),
+                                      ),
+                                      child: Text(
+                                        'Active',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Log formal portal filings, update citizen-reported progress, maintain audit history, and track deadlines.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.black54),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.fact_check_outlined,
+                                  size: 16),
+                              label:
+                                  const Text('Track Government Applications'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryBlue,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const ApplicationsListScreen(),
+                                  ),
                                 );
                               },
                             ),
@@ -849,7 +1019,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Future Modules (Phase 8)',
+                'Future Roadmap & Security',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -860,10 +1030,10 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildPhaseFeatureCard(
                 icon: Icons.security,
                 title: 'Hardening & Deployment',
-                description: 'Enterprise penetration testing and cloud production release.',
-                phaseBadge: 'Phase 8',
+                description:
+                    'Enterprise penetration testing and cloud production release.',
+                phaseBadge: 'Upcoming',
               ),
-
             ],
           ),
         ),

@@ -53,10 +53,12 @@ class UserProfileModel {
       'state': state,
       'district': district,
       'residence_type': residenceType,
-      if (annualFamilyIncome != null) 'annual_family_income': annualFamilyIncome,
-      if (occupation != null && occupation!.isNotEmpty) 'occupation': occupation,
-      if (educationLevel != null && educationLevel!.isNotEmpty) 'education_level': educationLevel,
+      if (annualFamilyIncome != null)
+        'annual_family_income': annualFamilyIncome,
+      if (occupation != null && occupation!.isNotEmpty)
+        'occupation': occupation,
+      if (educationLevel != null && educationLevel!.isNotEmpty)
+        'education_level': educationLevel,
     };
   }
 }
-

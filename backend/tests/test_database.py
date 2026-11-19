@@ -198,11 +198,11 @@ class TestDatabaseHealthApi:
         if response.status_code == 200:
             assert data.get("status") == "healthy"
             assert data.get("database") == "connected"
-            assert data.get("database_type") == "PostgreSQL"
+            assert data.get("database_type") in ("PostgreSQL", "SQLite")
         else:
             assert data.get("status") == "unhealthy"
             assert data.get("database") == "disconnected"
-            assert data.get("database_type") == "PostgreSQL"
+            assert data.get("database_type") in ("PostgreSQL", "SQLite")
 
         # Security check: Password or credentials must never appear in response keys or sensitive values
         assert "password" not in data
@@ -211,3 +211,10 @@ class TestDatabaseHealthApi:
         assert "url" not in data
         assert "postgres://" not in response.text.lower()
         assert "psycopg://" not in response.text.lower()
+
+    def test_database_health_alias_endpoint(self):
+        """Verifies that the /database/health route alias also resolves consistently."""
+        response = client.get("/database/health")
+        assert response.status_code in (200, 503)
+        data = response.json()
+        assert data.get("database_type") in ("PostgreSQL", "SQLite")

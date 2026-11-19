@@ -74,3 +74,18 @@ class AdvisoryRequest(BaseModel):
     """Citizen request parameters for AI advisory generation."""
     language: Optional[str] = Field(default="en", description="Language code: 'en', 'hi', or 'gu'")
 
+
+class DeepConsistencyAnalysisResponse(BaseModel):
+    """Premium-exclusive deep multi-document cross-validation audit."""
+    assessment_id: UUID
+    scheme_id: UUID
+    is_premium_analysis: bool = True
+    consistency_score: float
+    consistency_status: str
+    cross_document_audit: List[str] = Field(default_factory=list)
+    discrepancies: List[str] = Field(default_factory=list)
+    recommendations: List[str] = Field(default_factory=list)
+    disclaimer: str = (
+        "Premium Consistency Audit: This detailed cross-check validates consistency across uploaded "
+        "vault documents. It does not replace official nodal verification by authorities."
+    )

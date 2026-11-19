@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,13 @@ from app.schemas.application import (
     ApplicationResponse,
     ApplicationListResponse,
     ApplicationDeleteResponse,
+    ApplicationStatusHistoryResponse,
+    ApplicationStatusHistoryListResponse,
+    ReminderCreate,
+    ReminderUpdate,
+    ReminderResponse,
+    ReminderListResponse,
+    ReminderDeleteResponse,
 )
 from app.services.application_service import ApplicationService
 
@@ -23,14 +30,14 @@ router = APIRouter()
     response_model=ApplicationResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register submitted application for tracking",
-    description="Record an application that has been formally submitted on an official government portal.",
+    description="Record an application formally submitted on an official government portal with atomic initial history.",
 )
 def create_application(
     payload: ApplicationCreate,
     current_user: User = Depends(get_current_active_citizen),
     db: Session = Depends(get_db),
 ):
-    """Register submitted application under citizen ownership with initial 'Submitted' status."""
+    """Register submitted application under citizen ownership with initial 'Submitted' status and history."""
     app_record = ApplicationService.create_application(
         db=db,
         user=current_user,
@@ -72,6 +79,36 @@ def list_applications(
     )
 
 
+# -------------------------------------------------------------------------
+# Global Upcoming Reminders Route (Mounted BEFORE dynamic /{application_id})
+# -------------------------------------------------------------------------
+
+@router.get(
+    "/reminders/upcoming",
+    response_model=ReminderListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List all upcoming reminders for authenticated citizen",
+    description="Retrieve all active uncompleted reminders across all tracked applications for the authenticated caller.",
+)
+def list_user_upcoming_reminders(
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """List all upcoming reminders for the current citizen ordered by reminder date."""
+    reminders = ApplicationService.list_user_upcoming_reminders(
+        db=db,
+        user=current_user,
+    )
+    return ReminderListResponse(
+        total=len(reminders),
+        reminders=[ReminderResponse.model_validate(r) for r in reminders],
+    )
+
+
+# -------------------------------------------------------------------------
+# Dynamic Application Subresource Routes
+# -------------------------------------------------------------------------
+
 @router.get(
     "/{application_id}",
     response_model=ApplicationResponse,
@@ -98,7 +135,7 @@ def get_application_detail(
     response_model=ApplicationResponse,
     status_code=status.HTTP_200_OK,
     summary="Update application tracking status or details",
-    description="Update tracking status, reference number, or submission date. Rejects empty payloads and nulls.",
+    description="Update tracking status, remarks, reference number, or submission date. Rejects empty payloads and nulls.",
 )
 def update_application(
     application_id: uuid.UUID,
@@ -106,7 +143,7 @@ def update_application(
     current_user: User = Depends(get_current_active_citizen),
     db: Session = Depends(get_db),
 ):
-    """Update citizen tracking entry; requires explicit fields and returns HTTP 404 on unowned records."""
+    """Update citizen tracking entry atomically; appends immutable status/remark history."""
     app_record = ApplicationService.update_application(
         db=db,
         user=current_user,
@@ -128,7 +165,7 @@ def delete_application(
     current_user: User = Depends(get_current_active_citizen),
     db: Session = Depends(get_db),
 ):
-    """Delete tracking record from JanMitra database with ownership check."""
+    """Delete tracking record from JanMitra database with ownership check (cascades child history and reminders)."""
     deleted_id = ApplicationService.delete_application(
         db=db,
         user=current_user,
@@ -136,3 +173,156 @@ def delete_application(
     )
     return ApplicationDeleteResponse(id=deleted_id)
 
+
+# -------------------------------------------------------------------------
+# Status History Subresource Route
+# -------------------------------------------------------------------------
+
+@router.get(
+    "/{application_id}/history",
+    response_model=ApplicationStatusHistoryListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get application status history and remarks",
+    description="Retrieve chronological immutable audit trail of manual citizen status updates and progress remarks.",
+)
+def get_application_history(
+    application_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """Retrieve chronological status history for an owned application tracking record."""
+    current_status, history_records = ApplicationService.get_application_history(
+        db=db,
+        user=current_user,
+        application_id=application_id,
+    )
+    return ApplicationStatusHistoryListResponse(
+        application_id=application_id,
+        current_status=current_status,
+        total=len(history_records),
+        history=[ApplicationStatusHistoryResponse.model_validate(h) for h in history_records],
+    )
+
+
+# -------------------------------------------------------------------------
+# Application Reminders CRUD Subresource Routes
+# -------------------------------------------------------------------------
+
+@router.post(
+    "/{application_id}/reminders",
+    response_model=ReminderResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create reminder for application",
+    description="Schedule a task or deadline reminder associated with an owned application.",
+)
+def create_reminder(
+    application_id: uuid.UUID,
+    payload: ReminderCreate,
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """Create a new reminder linked to the specified owned application."""
+    reminder = ApplicationService.create_reminder(
+        db=db,
+        user=current_user,
+        application_id=application_id,
+        payload=payload,
+    )
+    return ReminderResponse.model_validate(reminder)
+
+
+@router.get(
+    "/{application_id}/reminders",
+    response_model=ReminderListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List reminders for application",
+    description="Retrieve all reminders scheduled for an application, sorted chronologically.",
+)
+def list_reminders(
+    application_id: uuid.UUID,
+    is_completed: Optional[bool] = Query(None, description="Filter by completion status (true/false)"),
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """List reminders for the specified owned application."""
+    reminders = ApplicationService.list_reminders(
+        db=db,
+        user=current_user,
+        application_id=application_id,
+        is_completed=is_completed,
+    )
+    return ReminderListResponse(
+        total=len(reminders),
+        reminders=[ReminderResponse.model_validate(r) for r in reminders],
+    )
+
+
+@router.get(
+    "/{application_id}/reminders/{reminder_id}",
+    response_model=ReminderResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get reminder detail",
+    description="Retrieve details of a specific reminder validating dual application and user ownership.",
+)
+def get_reminder_detail(
+    application_id: uuid.UUID,
+    reminder_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """Retrieve specific reminder; returns HTTP 404 on unowned or mismatched resources."""
+    reminder = ApplicationService.get_reminder_by_id(
+        db=db,
+        user=current_user,
+        application_id=application_id,
+        reminder_id=reminder_id,
+    )
+    return ReminderResponse.model_validate(reminder)
+
+
+@router.patch(
+    "/{application_id}/reminders/{reminder_id}",
+    response_model=ReminderResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update reminder or toggle completion",
+    description="Update reminder title, date, description, or completion status (auto-manages completed_at).",
+)
+def update_reminder(
+    application_id: uuid.UUID,
+    reminder_id: uuid.UUID,
+    payload: ReminderUpdate,
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """Update reminder details with dual ownership verification."""
+    reminder = ApplicationService.update_reminder(
+        db=db,
+        user=current_user,
+        application_id=application_id,
+        reminder_id=reminder_id,
+        payload=payload,
+    )
+    return ReminderResponse.model_validate(reminder)
+
+
+@router.delete(
+    "/{application_id}/reminders/{reminder_id}",
+    response_model=ReminderDeleteResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete application reminder",
+    description="Permanently delete an application reminder.",
+)
+def delete_reminder(
+    application_id: uuid.UUID,
+    reminder_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_citizen),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete a reminder with ownership verification."""
+    deleted_id = ApplicationService.delete_reminder(
+        db=db,
+        user=current_user,
+        application_id=application_id,
+        reminder_id=reminder_id,
+    )
+    return ReminderDeleteResponse(id=deleted_id)

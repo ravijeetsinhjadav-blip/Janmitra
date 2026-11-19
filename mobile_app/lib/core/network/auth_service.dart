@@ -24,42 +24,20 @@ class AuthService {
     return headers;
   }
 
-  /// Request OTP for mobile authentication
-  Future<SendOtpResponseModel> sendOtp(String mobileNumber) async {
-    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authSendOtp}');
-    try {
-      final response = await http.post(
-        url,
-        headers: _buildHeaders(),
-        body: jsonEncode({'mobile_number': mobileNumber}),
-      );
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode == 200) {
-        return SendOtpResponseModel.fromJson(data);
-      } else {
-        final message = data['detail'] ?? data['message'] ?? 'Failed to send OTP';
-        throw Exception(message);
-      }
-    } on SocketException {
-      throw Exception('Cannot connect to JanMitra backend server. Please verify network and backend status.');
-    }
-  }
-
-  /// Verify OTP and store tokens in secure storage
-  Future<TokenResponseModel> verifyOtp(
-    String mobileNumber,
-    String otp, {
+  /// Sign in with Email and Password (No OTP)
+  Future<TokenResponseModel> login(
+    String email,
+    String password, {
     String? deviceInfo,
   }) async {
-    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authVerifyOtp}');
+    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authLogin}');
     try {
       final response = await http.post(
         url,
         headers: _buildHeaders(),
         body: jsonEncode({
-          'mobile_number': mobileNumber,
-          'otp': otp,
+          'email': email.trim().toLowerCase(),
+          'password': password,
           'device_info': deviceInfo ?? 'JanMitra Mobile Client',
         }),
       );
@@ -71,17 +49,164 @@ class AuthService {
           accessToken: tokenResponse.accessToken,
           refreshToken: tokenResponse.refreshToken,
           userId: tokenResponse.userId,
-          mobileNumber: mobileNumber,
+          mobileNumber: tokenResponse.email ?? email,
           role: tokenResponse.role,
           profileCompleted: tokenResponse.profileCompleted,
         );
         return tokenResponse;
       } else {
-        final message = data['detail'] ?? data['message'] ?? 'OTP verification failed';
+        final message =
+            data['detail'] ?? data['message'] ?? 'Login failed. Please check credentials.';
         throw Exception(message);
       }
     } on SocketException {
-      throw Exception('Cannot connect to JanMitra backend server. Please verify backend status.');
+      throw Exception(
+          'Cannot connect to JanMitra backend server. Please verify network and backend status.');
+    }
+  }
+
+  /// Register a new citizen account with Email and Password
+  Future<TokenResponseModel> register({
+    required String email,
+    required String password,
+    required String confirmPassword,
+    required String fullName,
+    String? mobileNumber,
+    String? deviceInfo,
+  }) async {
+    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authRegister}');
+    try {
+      final response = await http.post(
+        url,
+        headers: _buildHeaders(),
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'password': password,
+          'confirm_password': confirmPassword,
+          'full_name': fullName.trim(),
+          if (mobileNumber != null && mobileNumber.isNotEmpty)
+            'mobile_number': mobileNumber.trim(),
+          'device_info': deviceInfo ?? 'JanMitra Mobile Client',
+        }),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 201) {
+        final tokenResponse = TokenResponseModel.fromJson(data);
+        await _storage.saveAuthSession(
+          accessToken: tokenResponse.accessToken,
+          refreshToken: tokenResponse.refreshToken,
+          userId: tokenResponse.userId,
+          mobileNumber: tokenResponse.email ?? email,
+          role: tokenResponse.role,
+          profileCompleted: tokenResponse.profileCompleted,
+        );
+        return tokenResponse;
+      } else {
+        final message =
+            data['detail'] ?? data['message'] ?? 'Registration failed.';
+        throw Exception(message);
+      }
+    } on SocketException {
+      throw Exception(
+          'Cannot connect to JanMitra backend server. Please verify backend status.');
+    }
+  }
+
+  /// Link or update email and password for an existing authenticated session
+  Future<TokenResponseModel> setCredentials({
+    required String email,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    String? token = await _storage.getAccessToken();
+    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authSetCredentials}');
+    try {
+      final response = await http.post(
+        url,
+        headers: _buildHeaders(token: token),
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'password': password,
+          'confirm_password': confirmPassword,
+        }),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200) {
+        final tokenResponse = TokenResponseModel.fromJson(data);
+        await _storage.saveAuthSession(
+          accessToken: tokenResponse.accessToken,
+          refreshToken: tokenResponse.refreshToken,
+          userId: tokenResponse.userId,
+          mobileNumber: tokenResponse.email ?? email,
+          role: tokenResponse.role,
+          profileCompleted: tokenResponse.profileCompleted,
+        );
+        return tokenResponse;
+      } else {
+        final message =
+            data['detail'] ?? data['message'] ?? 'Failed to update credentials.';
+        throw Exception(message);
+      }
+    } on SocketException {
+      throw Exception('Cannot connect to JanMitra backend server.');
+    }
+  }
+
+  /// Request a password reset link sent via email
+  Future<String> forgotPassword(String email) async {
+    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authForgotPassword}');
+    try {
+      final response = await http.post(
+        url,
+        headers: _buildHeaders(),
+        body: jsonEncode({'email': email.trim().toLowerCase()}),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200) {
+        return data['message'] ??
+            'If an account with that email exists, password reset instructions have been sent.';
+      } else {
+        final message =
+            data['detail'] ?? data['message'] ?? 'Unable to process password reset request.';
+        throw Exception(message);
+      }
+    } on SocketException {
+      throw Exception('Cannot connect to JanMitra backend server.');
+    }
+  }
+
+  /// Reset password using email verification token
+  Future<String> resetPassword({
+    required String token,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authResetPassword}');
+    try {
+      final response = await http.post(
+        url,
+        headers: _buildHeaders(),
+        body: jsonEncode({
+          'token': token.trim(),
+          'password': password,
+          'confirm_password': confirmPassword,
+        }),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200) {
+        return data['message'] ??
+            'Password has been successfully updated. Please sign in with your new password.';
+      } else {
+        final message =
+            data['detail'] ?? data['message'] ?? 'Failed to reset password.';
+        throw Exception(message);
+      }
+    } on SocketException {
+      throw Exception('Cannot connect to JanMitra backend server.');
     }
   }
 
@@ -214,7 +339,8 @@ class AuthService {
     final refreshToken = await _storage.getRefreshToken();
 
     if (token != null && refreshToken != null) {
-      final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authLogout}');
+      final url =
+          Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.authLogout}');
       try {
         await http.post(
           url,
@@ -235,7 +361,8 @@ class AuthService {
   /// Request account deletion with 30-day retention
   Future<Map<String, dynamic>> requestAccountDeletion({String? reason}) async {
     String? token = await _storage.getAccessToken();
-    final url = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.userDeleteRequest}');
+    final url =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.userDeleteRequest}');
 
     var response = await http.post(
       url,
@@ -267,4 +394,3 @@ class AuthService {
     }
   }
 }
-

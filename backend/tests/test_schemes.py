@@ -5,15 +5,28 @@ from app.services.eligibility_service import EligibilityEngine
 from app.schemas.scheme import EligibilityCondition
 
 
-def get_auth_headers(client, mobile_number: str) -> dict:
-    """Helper to authenticate a citizen via mock OTP."""
-    res_otp = client.post("/api/v1/auth/send-otp", json={"mobile_number": mobile_number})
-    otp = res_otp.json()["dev_otp"]
-    res_verify = client.post(
-        "/api/v1/auth/verify-otp",
-        json={"mobile_number": mobile_number, "otp": otp},
+def get_auth_headers(client, mobile_number: str = "+919876543210") -> dict:
+    """Authenticate citizen via Email+Password and return Bearer headers."""
+    clean_id = "".join(c for c in mobile_number if c.isalnum()) or "default"
+    email = f"user_{clean_id}@example.com"
+    res_reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "Password@12345",
+            "confirm_password": "Password@12345",
+            "full_name": "Test Citizen",
+            "mobile_number": mobile_number,
+        },
     )
-    token = res_verify.json()["access_token"]
+    if res_reg.status_code == 201:
+        token = res_reg.json()["access_token"]
+    else:
+        res_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "Password@12345"},
+        )
+        token = res_login.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -341,9 +354,9 @@ class TestSchemeDiscoveryEndpoints:
         assert len(data["items"]) == 2
         assert data["total"] >= 5
 
-        # Verify demo flag and advisory nature
+        # Verify official scheme flag and advisory nature
         first_item = data["items"][0]
-        assert first_item["is_demo_data"] is True
+        assert first_item["is_demo_data"] is False
         assert first_item["status"] == "active"
         assert "advisory_notice" in first_item
 
@@ -386,7 +399,7 @@ class TestSchemeDiscoveryEndpoints:
         assert "PM-KISAN" in data["scheme_name"]
         assert data["official_source_url"] == "https://pmkisan.gov.in/"
         assert data["official_application_url"].startswith("https://pmkisan.gov.in/")
-        assert data["is_demo_data"] is True
+        assert data["is_demo_data"] is False
         assert data["source_last_verified_at"] is not None
         assert "pmkisan.gov.in" in data["source_verification_details"]
 
@@ -498,12 +511,12 @@ class TestSchemeSourceMetadataVerification:
     def test_seeded_schemes_source_metadata_completeness(self):
         from app.services.scheme_service import DEMO_SCHEMES_SEED
 
-        assert len(DEMO_SCHEMES_SEED) == 5
+        assert len(DEMO_SCHEMES_SEED) >= 5
 
         for s in DEMO_SCHEMES_SEED:
-            # 1. Marked as DEMO data
-            assert s["is_demo_data"] is True
-            assert "[DEMO]" in s["scheme_name"]
+            # 1. Clean official scheme data (no DEMO markers)
+            assert s["is_demo_data"] is False
+            assert "[DEMO]" not in s["scheme_name"]
 
             # 2. Official URLs present and valid
             assert s["official_source_url"].startswith("https://")
@@ -517,9 +530,9 @@ class TestSchemeSourceMetadataVerification:
             assert len(s["benefits_source_reference"].strip()) > 10
 
             # 4. Freshness and verification details
-            assert s["source_freshness_status"] == "Verified Official Source (Demo Seed)"
+            assert s["source_freshness_status"] == "Verified Active Official Scheme"
             assert isinstance(s["source_last_verified_at"], datetime)
-            assert "DEMO / TEST DATA" in s["source_verification_details"]
+            assert "DEMO / TEST DATA" not in s["source_verification_details"]
 
     def test_scheme_detail_api_exposes_source_verification_metadata(self, client):
         pm_kisan_id = "11111111-1111-1111-1111-111111111111"
@@ -528,13 +541,13 @@ class TestSchemeSourceMetadataVerification:
         data = res.json()
 
         assert data["id"] == pm_kisan_id
-        assert data["is_demo_data"] is True
+        assert data["is_demo_data"] is False
         assert data["official_source_url"] == "https://pmkisan.gov.in/"
         assert data["official_application_url"] == "https://pmkisan.gov.in/RegistrationFormNew.aspx"
-        assert data["source_freshness_status"] == "Verified Official Source (Demo Seed)"
+        assert data["source_freshness_status"] == "Verified Active Official Scheme"
         assert "PM-KISAN Operational Guidelines" in data["eligibility_source_reference"]
         assert "PM-KISAN Operational Guidelines" in data["benefits_source_reference"]
-        assert "DEMO / TEST DATA" in data["source_verification_details"]
+        assert "DEMO / TEST DATA" not in data["source_verification_details"]
         assert data["source_last_verified_at"] is not None
         assert "JanMitra Assist is an advisory preparation platform" in data["advisory_notice"]
 

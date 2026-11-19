@@ -56,7 +56,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     {'value': 'caste_certificate', 'label': 'Caste Certificate'},
     {'value': 'domicile_certificate', 'label': 'Domicile Certificate'},
     {'value': 'ration_card', 'label': 'Ration Card'},
-    {'value': 'aadhaar_card', 'label': 'Aadhaar Card'},
+    {'value': 'voter_id', 'label': 'Voter ID / Photo ID'},
     {'value': 'land_record', 'label': 'Land Record (7/12)'},
     {'value': 'bank_passbook', 'label': 'Bank Passbook'},
     {'value': 'other', 'label': 'Other Document'},
@@ -116,11 +116,20 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        if (file.bytes != null) {
+        Uint8List? bytes = file.bytes;
+        if (bytes == null) {
+          try {
+            bytes = await file.xFile.readAsBytes();
+          } catch (_) {}
+        }
+        if (bytes != null && bytes.isNotEmpty) {
           setState(() {
-            _fileBytes = file.bytes;
+            _fileBytes = bytes;
             _fileName = file.name;
           });
+        } else {
+          setState(() => _errorMessage =
+              'Could not read file bytes. Please try another file.');
         }
       }
     } catch (e) {
@@ -178,7 +187,8 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                   color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.upload_file, color: AppTheme.primaryBlue),
+                child:
+                    const Icon(Icons.upload_file, color: AppTheme.primaryBlue),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -204,7 +214,8 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
             decoration: const InputDecoration(
               labelText: 'Document Classification',
               border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             ),
             items: _documentTypes.map((t) {
               return DropdownMenuItem<String>(
@@ -267,7 +278,9 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
               child: Row(
                 children: [
                   Icon(
-                    _fileName!.endsWith('.pdf') ? Icons.picture_as_pdf : Icons.image,
+                    _fileName!.endsWith('.pdf')
+                        ? Icons.picture_as_pdf
+                        : Icons.image,
                     color: AppTheme.primaryBlue,
                     size: 24,
                   ),
@@ -278,20 +291,23 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                       children: [
                         Text(
                           _fileName!,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         if (_fileBytes != null)
                           Text(
                             '${(_fileBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB ready for OCR',
-                            style: const TextStyle(fontSize: 11, color: Colors.black54),
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.black54),
                           ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                    icon: const Icon(Icons.delete_outline,
+                        color: Colors.red, size: 20),
                     onPressed: () {
                       setState(() {
                         _fileBytes = null;
@@ -311,12 +327,14 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
           ],
           const SizedBox(height: 18),
           ElevatedButton(
-            onPressed: (_fileBytes != null && !_isUploading) ? _handleUpload : null,
+            onPressed:
+                (_fileBytes != null && !_isUploading) ? _handleUpload : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryBlue,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             child: _isUploading
                 ? const Row(
@@ -325,13 +343,15 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                       SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       ),
                       SizedBox(width: 12),
                       Text('Analyzing Document with OCR...'),
                     ],
                   )
-                : const Text('Upload & Run OCR Extraction', style: TextStyle(fontWeight: FontWeight.bold)),
+                : const Text('Upload & Run OCR Extraction',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 8),
           const Text(

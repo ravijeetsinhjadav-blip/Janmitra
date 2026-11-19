@@ -10,12 +10,15 @@ void main() {
   final sampleScheme = SchemeModel(
     id: '11111111-1111-1111-1111-111111111111',
     schemeName: '[DEMO] Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)',
-    shortDescription: 'Direct income support of ₹6,000 per year for farmer families.',
-    description: 'PM-KISAN is a central sector scheme to augment the income of landholding farmers.',
+    shortDescription:
+        'Direct income support of ₹6,000 per year for farmer families.',
+    description:
+        'PM-KISAN is a central sector scheme to augment the income of landholding farmers.',
     department: 'Ministry of Agriculture and Farmers Welfare',
     category: 'Agriculture',
     stateApplicability: 'All India',
-    eligibilitySummary: 'All landholding farmer families having cultivable land in their names.',
+    eligibilitySummary:
+        'All landholding farmer families having cultivable land in their names.',
     benefits: [
       'Financial benefit of ₹6,000 per year per family',
       'Paid in three equal installments of ₹2,000 every 4 months',
@@ -76,17 +79,22 @@ void main() {
         'This assessment is strictly advisory and does not constitute official government approval or rejection.',
   );
 
-  testWidgets('SchemeDiscoveryScreen UI elements test', (WidgetTester tester) async {
-    await tester.pumpWidget(const JanMitraApp(homeOverride: SchemeDiscoveryScreen()));
+  testWidgets('SchemeDiscoveryScreen UI elements test',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const JanMitraApp(homeOverride: SchemeDiscoveryScreen()));
     await tester.pump();
 
     // Verify search and category controls
     expect(find.text('Government Schemes'), findsOneWidget);
     expect(find.text('State Scope:'), findsOneWidget);
-    expect(find.text('Search schemes by keyword or ministry...'), findsOneWidget);
+    expect(
+        find.text('Search schemes by keyword or ministry...'), findsOneWidget);
   });
 
-  testWidgets('SchemeDetailsScreen displays complete information and check button', (WidgetTester tester) async {
+  testWidgets(
+      'SchemeDetailsScreen displays complete information and check button',
+      (WidgetTester tester) async {
     await tester.pumpWidget(JanMitraApp(
       homeOverride: SchemeDetailsScreen(scheme: sampleScheme),
     ));
@@ -101,7 +109,9 @@ void main() {
     expect(find.text('Check My Eligibility'), findsOneWidget);
   });
 
-  testWidgets('EligibilityResultScreen displays advisory determination and breakdown', (WidgetTester tester) async {
+  testWidgets(
+      'EligibilityResultScreen displays advisory determination and breakdown',
+      (WidgetTester tester) async {
     await tester.pumpWidget(JanMitraApp(
       homeOverride: EligibilityResultScreen(assessment: sampleAssessment),
     ));
@@ -116,7 +126,8 @@ void main() {
     expect(find.text('Official Government Portal'), findsOneWidget);
   });
 
-  testWidgets('HomeScreen Phase 4 scheme discovery card verification test', (WidgetTester tester) async {
+  testWidgets('HomeScreen Phase 4 scheme discovery card verification test',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const JanMitraApp(homeOverride: HomeScreen()));
     await tester.pump();
 
@@ -127,4 +138,3 @@ void main() {
     expect(find.text('Assessments'), findsOneWidget);
   });
 }
-

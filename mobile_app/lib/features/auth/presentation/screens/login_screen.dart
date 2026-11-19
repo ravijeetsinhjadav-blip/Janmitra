@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../core/network/auth_service.dart';
 import '../../../../core/theme/app_theme.dart';
-import 'otp_verification_screen.dart';
+import '../../../home/presentation/screens/home_screen.dart';
+import '../../../profile/presentation/screens/profile_setup_screen.dart';
+import 'register_screen.dart';
+import 'reset_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,33 +15,41 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _mobileController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
 
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _mobileController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  String? _validateMobile(String? value) {
+  String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Please enter your mobile number';
+      return 'Please enter your email address';
     }
-    final clean = value.replaceAll(RegExp(r'\D'), '');
-    if (clean.length != 10) {
-      return 'Mobile number must be exactly 10 digits';
-    }
-    if (!RegExp(r'^[6-9]').hasMatch(clean)) {
-      return 'Please enter a valid Indian mobile number (starts with 6-9)';
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Please enter a valid email address';
     }
     return null;
   }
 
-  Future<void> _handleSendOtp() async {
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your password';
+    }
+    return null;
+  }
+
+  Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -47,27 +58,32 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final rawNumber = _mobileController.text.trim();
-      final response = await _authService.sendOtp(rawNumber);
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final tokenResponse = await _authService.login(email, password);
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(response.message),
+        const SnackBar(
+          content: Text('Logged in successfully!'),
           backgroundColor: AppTheme.accentGreen,
         ),
       );
 
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OTPVerificationScreen(
-            mobileNumber: rawNumber,
-            devOtp: response.devOtp,
-            cooldownSeconds: response.cooldownSeconds,
+      if (!tokenResponse.profileCompleted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const ProfileSetupScreen(isInitialSetup: true),
           ),
-        ),
-      );
+          (route) => false,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -79,6 +95,114 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
+  }
+
+  void _showForgotPasswordDialog() {
+    final emailForgotController =
+        TextEditingController(text: _emailController.text.trim());
+    bool isSubmitting = false;
+    String? dialogError;
+    String? dialogSuccess;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Reset Password'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter your registered email address to receive a secure, single-use password reset link.',
+                  style: TextStyle(fontSize: 13, color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailForgotController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                if (dialogError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(dialogError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12)),
+                ],
+                if (dialogSuccess != null) ...[
+                  const SizedBox(height: 12),
+                  Text(dialogSuccess!,
+                      style: const TextStyle(
+                          color: Colors.green,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ResetPasswordScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.key, size: 16),
+                    label: const Text('Enter Reset Token', style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final email = emailForgotController.text.trim();
+                        if (email.isEmpty || !email.contains('@')) {
+                          setDialogState(() {
+                            dialogError = 'Please enter a valid email address';
+                          });
+                          return;
+                        }
+                        setDialogState(() {
+                          isSubmitting = true;
+                          dialogError = null;
+                        });
+                        try {
+                          final msg =
+                              await _authService.forgotPassword(email);
+                          setDialogState(() {
+                            isSubmitting = false;
+                            dialogSuccess = msg;
+                          });
+                        } catch (err) {
+                          setDialogState(() {
+                            isSubmitting = false;
+                            dialogError =
+                                err.toString().replaceAll('Exception: ', '');
+                          });
+                        }
+                      },
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Send Link'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -105,7 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.phone_android_rounded,
+                    Icons.security_rounded,
                     size: 38,
                     color: AppTheme.primaryBlue,
                   ),
@@ -123,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Enter your 10-digit mobile number to receive a secure One-Time Password (OTP).',
+                'Sign in with your registered email and password to access your citizen dashboard.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -132,44 +256,58 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.shade300),
+
+              // Email input
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email Address *',
+                  hintText: 'citizen@example.com',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: TextFormField(
-                    controller: _mobileController,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
-                    style: const TextStyle(fontSize: 18, letterSpacing: 1.2),
-                    decoration: InputDecoration(
-                      border: InputBorder.none,
-                      counterText: '',
-                      icon: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          '+91',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ),
-                      hintText: '9876543210',
-                      hintStyle: TextStyle(color: Colors.grey.shade400),
-                    ),
-                    validator: _validateMobile,
+                validator: _validateEmail,
+              ),
+              const SizedBox(height: 16),
+
+              // Password input
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password *',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                validator: _validatePassword,
+              ),
+
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _showForgotPasswordDialog,
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                 ),
               ),
+
               if (_errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -181,12 +319,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+                          style: TextStyle(
+                              color: Colors.red.shade800, fontSize: 13),
                         ),
                       ),
                     ],
@@ -195,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _isLoading ? null : _handleSendOtp,
+                onPressed: _isLoading ? null : _handleLogin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryBlue,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -213,11 +353,37 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       )
                     : const Text(
-                        'Get OTP',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        'Sign In',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),
+              const SizedBox(height: 24),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Don't have an account? "),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Register Here',
+                      style: TextStyle(
+                        color: AppTheme.primaryBlue,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 32),
+
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -230,7 +396,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.shield_outlined, color: Colors.blue.shade800, size: 18),
+                        Icon(Icons.shield_outlined,
+                            color: Colors.blue.shade800, size: 18),
                         const SizedBox(width: 8),
                         Text(
                           'Citizen Privacy Commitment',
@@ -244,8 +411,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'JanMitra Assist never asks for or stores Aadhaar numbers. Your mobile number is used strictly for authentication and service alerts.',
-                      style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
+                      'JanMitra Assist enforces strict Email + Password security with Argon2id cryptographic hashing. OTP authentication has been deprecated.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.black87, height: 1.4),
                     ),
                   ],
                 ),

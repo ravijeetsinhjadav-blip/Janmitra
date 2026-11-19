@@ -41,7 +41,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       if (!mounted) return;
       setState(() => _isRetrying = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to retry OCR: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Failed to retry OCR: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
@@ -82,7 +84,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       if (!mounted) return;
       setState(() => _isDeleting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete document: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Failed to delete document: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
@@ -121,7 +125,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                   // Document Overview Card
                   Card(
                     elevation: 1,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -132,10 +137,12 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                  color: AppTheme.primaryBlue
+                                      .withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: Icon(_doc.iconData, color: AppTheme.primaryBlue, size: 28),
+                                child: Icon(_doc.iconData,
+                                    color: AppTheme.primaryBlue, size: 28),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
@@ -144,14 +151,17 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                                   children: [
                                     Text(
                                       _doc.originalFilename,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '${_doc.displayType} • ${_doc.formattedFileSize}',
-                                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                      style: const TextStyle(
+                                          fontSize: 12, color: Colors.black54),
                                     ),
                                   ],
                                 ),
@@ -162,16 +172,26 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Uploaded On:', style: TextStyle(color: Colors.black54, fontSize: 13)),
-                              Text(_doc.formattedDate, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                              const Text('Uploaded On:',
+                                  style: TextStyle(
+                                      color: Colors.black54, fontSize: 13)),
+                              Text(_doc.formattedDate,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13)),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('MIME Type:', style: TextStyle(color: Colors.black54, fontSize: 13)),
-                              Text(_doc.mimeType, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                              const Text('MIME Type:',
+                                  style: TextStyle(
+                                      color: Colors.black54, fontSize: 13)),
+                              Text(_doc.mimeType,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13)),
                             ],
                           ),
                         ],
@@ -183,7 +203,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                   // OCR Intelligence Card
                   Card(
                     elevation: 1,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -194,14 +215,19 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                             children: [
                               const Text(
                                 'OCR Document Intelligence',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: _doc.statusColor.withValues(alpha: 0.1),
+                                  color:
+                                      _doc.statusColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: _doc.statusColor.withValues(alpha: 0.4)),
+                                  border: Border.all(
+                                      color: _doc.statusColor
+                                          .withValues(alpha: 0.4)),
                                 ),
                                 child: Text(
                                   _doc.statusBadgeText,
@@ -224,15 +250,24 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        const Text('Extraction Confidence', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                                        Text('$confPercent%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _doc.statusColor)),
+                                        const Text('Extraction Confidence',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.black54)),
+                                        Text('$confPercent%',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: _doc.statusColor)),
                                       ],
                                     ),
                                     const SizedBox(height: 6),
                                     LinearProgressIndicator(
-                                      value: (_doc.ocrConfidence ?? 0.0).clamp(0.0, 1.0),
+                                      value: (_doc.ocrConfidence ?? 0.0)
+                                          .clamp(0.0, 1.0),
                                       backgroundColor: Colors.grey.shade200,
                                       color: _doc.statusColor,
                                       minHeight: 6,
@@ -252,18 +287,22 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.orange.shade50,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.orange.shade300),
+                                border:
+                                    Border.all(color: Colors.orange.shade300),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 22),
+                                  Icon(Icons.warning_amber_rounded,
+                                      color: Colors.orange.shade800, size: 22),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       _doc.ocrErrorMessage ??
                                           'Low extraction confidence detected. Review the document text carefully or upload a sharper scan.',
-                                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.orange.shade900),
                                     ),
                                   ),
                                 ],
@@ -277,11 +316,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Extracted Text', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const Text('Extracted Text',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14)),
                               if ((_doc.ocrExtractedText ?? '').isNotEmpty)
                                 TextButton.icon(
                                   icon: const Icon(Icons.copy, size: 14),
-                                  label: const Text('Copy Text', style: TextStyle(fontSize: 12)),
+                                  label: const Text('Copy Text',
+                                      style: TextStyle(fontSize: 12)),
                                   onPressed: _copyExtractedText,
                                 ),
                             ],
@@ -319,13 +362,17 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                               children: [
                                 if (_doc.ocrMetadata.containsKey('provider'))
                                   Chip(
-                                    label: Text('Engine: ${_doc.ocrMetadata['provider']}', style: const TextStyle(fontSize: 11)),
+                                    label: Text(
+                                        'Engine: ${_doc.ocrMetadata['provider']}',
+                                        style: const TextStyle(fontSize: 11)),
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                   ),
                                 if (_doc.ocrMetadata.containsKey('word_count'))
                                   Chip(
-                                    label: Text('${_doc.ocrMetadata['word_count']} words', style: const TextStyle(fontSize: 11)),
+                                    label: Text(
+                                        '${_doc.ocrMetadata['word_count']} words',
+                                        style: const TextStyle(fontSize: 11)),
                                     padding: EdgeInsets.zero,
                                     visualDensity: VisualDensity.compact,
                                   ),
@@ -344,15 +391,19 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
                           )
                         : const Icon(Icons.refresh, size: 18),
-                    label: Text(_isRetrying ? 'Re-running OCR...' : 'Retry OCR Processing'),
+                    label: Text(_isRetrying
+                        ? 'Re-running OCR...'
+                        : 'Retry OCR Processing'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryBlue,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                     onPressed: _isRetrying ? null : _handleRetryOcr,
                   ),
@@ -362,4 +413,3 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     );
   }
 }
-

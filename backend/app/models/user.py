@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, Boolean, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 from app.core.database import Base
 
 
@@ -32,7 +32,12 @@ class User(Base):
         unique=True,
         nullable=True,
         index=True,
-        comment="Citizen email address (optional, unique when provided)",
+        comment="Citizen email address (unique)",
+    )
+    password_hash = Column(
+        String(255),
+        nullable=True,
+        comment="Argon2id or bcrypt password hash",
     )
     mobile_number = Column(
         String(20),
@@ -83,6 +88,13 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    application_reminders = relationship(
+        "ApplicationReminder",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        primaryjoin="User.id == foreign(ApplicationReminder.user_id)",
+        overlaps="application,reminders",
+    )
     subscriptions = relationship(
         "Subscription",
         back_populates="user",
@@ -98,6 +110,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    device_tokens = relationship(
+        "DeviceToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     sessions = relationship(
         "UserSession",
         back_populates="user",
@@ -108,6 +125,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def has_password(self) -> bool:
+        return bool(self.password_hash)
 
     def __repr__(self) -> str:
         return f"<User id={self.id} role={self.role} mobile={self.mobile_number}>"

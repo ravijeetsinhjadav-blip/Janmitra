@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/services/secure_storage_service.dart';
 import '../models/document_models.dart';
@@ -32,7 +33,8 @@ class DocumentService {
     required String filename,
     required String documentType,
   }) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.documentUpload}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.documentUpload}');
     final request = http.MultipartRequest('POST', uri);
 
     final token = await _storage.getAccessToken();
@@ -43,10 +45,21 @@ class DocumentService {
 
     request.fields['document_type'] = documentType;
 
+    final ext = filename.split('.').last.toLowerCase();
+    MediaType? mediaType;
+    if (ext == 'pdf') {
+      mediaType = MediaType('application', 'pdf');
+    } else if (ext == 'png') {
+      mediaType = MediaType('image', 'png');
+    } else if (ext == 'jpg' || ext == 'jpeg') {
+      mediaType = MediaType('image', 'jpeg');
+    }
+
     final multipartFile = http.MultipartFile.fromBytes(
       'file',
       fileBytes,
       filename: filename,
+      contentType: mediaType,
     );
     request.files.add(multipartFile);
 
@@ -74,7 +87,9 @@ class DocumentService {
     String? ocrStatus,
   }) async {
     final queryParams = <String, String>{};
-    if (documentType != null && documentType.isNotEmpty && documentType != 'all') {
+    if (documentType != null &&
+        documentType.isNotEmpty &&
+        documentType != 'all') {
       queryParams['document_type'] = documentType;
     }
     if (ocrStatus != null && ocrStatus.isNotEmpty && ocrStatus != 'ALL') {
@@ -91,7 +106,8 @@ class DocumentService {
 
       if (response.statusCode == 200) {
         final list = (data['documents'] as List<dynamic>? ?? [])
-            .map((item) => DocumentMetadataModel.fromJson(item as Map<String, dynamic>))
+            .map((item) =>
+                DocumentMetadataModel.fromJson(item as Map<String, dynamic>))
             .toList();
         return list;
       } else {
@@ -106,7 +122,8 @@ class DocumentService {
 
   /// Get specific document details and OCR text
   Future<DocumentMetadataModel> getDocumentDetail(String documentId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.documentDetail(documentId)}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.documentDetail(documentId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.get(uri, headers: headers);
@@ -126,7 +143,8 @@ class DocumentService {
 
   /// Delete document from vault
   Future<void> deleteDocument(String documentId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.documentDetail(documentId)}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.documentDetail(documentId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.delete(uri, headers: headers);
@@ -143,7 +161,8 @@ class DocumentService {
 
   /// Retry OCR extraction on existing document
   Future<DocumentMetadataModel> retryOcr(String documentId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.documentRetryOcr(documentId)}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.documentRetryOcr(documentId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.post(uri, headers: headers);
@@ -162,15 +181,18 @@ class DocumentService {
   }
 
   /// Check scheme document requirements against user's vault
-  Future<SchemeDocumentChecklistModel> getSchemeDocumentChecklist(String schemeId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeDocumentChecklist(schemeId)}');
+  Future<SchemeDocumentChecklistModel> getSchemeDocumentChecklist(
+      String schemeId) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeDocumentChecklist(schemeId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.get(uri, headers: headers);
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return SchemeDocumentChecklistModel.fromJson(data as Map<String, dynamic>);
+        return SchemeDocumentChecklistModel.fromJson(
+            data as Map<String, dynamic>);
       } else {
         final message = data['detail'] ?? 'Failed to load document checklist.';
         throw Exception(message);
@@ -181,4 +203,3 @@ class DocumentService {
     }
   }
 }
-

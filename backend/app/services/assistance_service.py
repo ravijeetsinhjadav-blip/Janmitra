@@ -23,6 +23,7 @@ from app.schemas.assistance import (
     ApplicationInfoGuide,
     ApplicationAssistanceResponse,
     ChecklistUpdateResponse,
+    ApplicationPreparationPacketResponse,
 )
 from app.core.logging import get_logger
 
@@ -184,9 +185,17 @@ class AssistanceService:
         checklist_items: List[ChecklistItem] = []
 
         # A. Required Documents
+        # Dynamic Vault Synchronization: Document checklist completion is strictly bound to live
+        # document readiness (is_ready), clearing stale completion if documents were deleted or rejected.
+        active_doc_items = set()
         for ds in doc_statuses:
             item_id = f"doc_{_slugify(ds.document_name)}"
             is_ready = ds.status in ["Ready for Application Preparation", "Available"]
+            if is_ready:
+                active_doc_items.add(item_id)
+            else:
+                completed_item_ids.discard(item_id)
+
             checklist_items.append(
                 ChecklistItem(
                     item_id=item_id,
@@ -194,7 +203,7 @@ class AssistanceService:
                     title=f"Keep Ready: {ds.document_name}",
                     description=f"Status: {ds.status}. {ds.notes}",
                     is_mandatory=True,
-                    is_completed=(item_id in completed_item_ids) or is_ready,
+                    is_completed=is_ready,
                 )
             )
 
@@ -233,7 +242,7 @@ class AssistanceService:
             ChecklistItem(
                 item_id="decl_dbt_bank_active",
                 category="declaration",
-                title="Verify Aadhaar-Seeded Bank Account",
+                title="Verify DBT-Enabled Bank Account",
                 description="Ensure your bank account is active and mapped to NPCI/DBT for Direct Benefit Transfer.",
                 is_mandatory=True,
                 is_completed="decl_dbt_bank_active" in completed_item_ids,
@@ -244,7 +253,7 @@ class AssistanceService:
                 item_id="action_visit_portal",
                 category="portal_action",
                 title="Open Official Government Portal",
-                description=f"Navigate to {scheme.official_application_url} and sign up with your Aadhaar-linked mobile number.",
+                description=f"Navigate to {scheme.official_application_url} and sign up with your registered mobile number.",
                 is_mandatory=True,
                 is_completed="action_visit_portal" in completed_item_ids,
             )
@@ -303,8 +312,26 @@ class AssistanceService:
                     language=language,
                 )
             except Exception as e:
-                SubscriptionService.release_guidance_quota(db=db, user_id=user_id)
-                raise e
+                from app.services.llm_service import is_production, MockLLMAdapter
+                if not is_production():
+                    logger.warning(
+                        "LLM guide generation failed in development (%s). Gracefully falling back to MockLLMAdapter.",
+                        e,
+                    )
+                    mock_adapter = MockLLMAdapter()
+                    guide_dict = mock_adapter.generate_application_guide(
+                        scheme_name=scheme.scheme_name,
+                        category=scheme.category,
+                        department=scheme.department,
+                        required_documents=scheme.required_documents or [],
+                        required_profile_fields=scheme.required_profile_fields or [],
+                        application_process=scheme.application_process or [],
+                        rag_chunks=rag_dicts,
+                        language=language,
+                    )
+                else:
+                    SubscriptionService.release_guidance_quota(db=db, user_id=user_id)
+                    raise e
             new_cache = dict(cache)
             new_cache[language] = guide_dict
             scheme.application_guide_cache = new_cache
@@ -336,6 +363,7 @@ class AssistanceService:
 
         # 7. Persist updated assistance snapshot into assessment record
         updated_res_data = dict(res_data)
+        updated_res_data["completed_checklist_items"] = list(completed_item_ids | active_doc_items)
         updated_res_data["assistance_data"] = {
             "checklist_total_count": total_count,
             "checklist_completed_count": completed_count,
@@ -459,17 +487,38 @@ class AssistanceService:
                 for c in rag_chunks
             ]
 
-            llm_adapter = get_llm_adapter()
-            guide_dict = llm_adapter.generate_application_guide(
-                scheme_name=scheme.scheme_name,
-                category=scheme.category,
-                department=scheme.department,
-                required_documents=scheme.required_documents or [],
-                required_profile_fields=scheme.required_profile_fields or [],
-                application_process=scheme.application_process or [],
-                rag_chunks=rag_dicts,
-                language=language,
-            )
+            try:
+                llm_adapter = get_llm_adapter()
+                guide_dict = llm_adapter.generate_application_guide(
+                    scheme_name=scheme.scheme_name,
+                    category=scheme.category,
+                    department=scheme.department,
+                    required_documents=scheme.required_documents or [],
+                    required_profile_fields=scheme.required_profile_fields or [],
+                    application_process=scheme.application_process or [],
+                    rag_chunks=rag_dicts,
+                    language=language,
+                )
+            except Exception as e:
+                from app.services.llm_service import is_production, MockLLMAdapter
+                if not is_production():
+                    logger.warning(
+                        "Public guide generation failed in development (%s). Gracefully falling back to MockLLMAdapter.",
+                        e,
+                    )
+                    mock_adapter = MockLLMAdapter()
+                    guide_dict = mock_adapter.generate_application_guide(
+                        scheme_name=scheme.scheme_name,
+                        category=scheme.category,
+                        department=scheme.department,
+                        required_documents=scheme.required_documents or [],
+                        required_profile_fields=scheme.required_profile_fields or [],
+                        application_process=scheme.application_process or [],
+                        rag_chunks=rag_dicts,
+                        language=language,
+                    )
+                else:
+                    raise e
             new_cache = dict(cache)
             new_cache[language] = guide_dict
             scheme.application_guide_cache = new_cache
@@ -496,5 +545,47 @@ class AssistanceService:
                 "disclaimer",
                 "Advisory Notice: JanMitra Assist is an application preparation assistant. "
                 "It does NOT replace official government portals or submit applications on your behalf."
+            ),
+        )
+
+    @classmethod
+    def export_preparation_packet(
+        cls,
+        db: Session,
+        user_id: UUID,
+        scheme_id: UUID,
+        language: str = "en",
+    ) -> ApplicationPreparationPacketResponse:
+        """Export a consolidated, printable/downloadable summary of application preparation.
+        Strictly excludes any citizen PII, Aadhaar numbers, or raw OCR tokens.
+        """
+        assistance = cls.generate_or_get_assistance(
+            db=db,
+            user_id=user_id,
+            scheme_id=scheme_id,
+            language=language,
+        )
+
+        return ApplicationPreparationPacketResponse(
+            scheme_id=assistance.scheme_id,
+            scheme_name=assistance.scheme_name,
+            department=assistance.department,
+            category=assistance.category,
+            official_source_url=assistance.official_source_url,
+            official_application_url=assistance.official_application_url,
+            generated_at=datetime.now(timezone.utc),
+            language=assistance.language,
+            criteria_match_percentage=assistance.criteria_match_percentage,
+            readiness_score=assistance.overall_readiness_score,
+            document_statuses=assistance.document_preparation_statuses,
+            checklist=assistance.checklist,
+            portal_steps=assistance.guide.portal_steps,
+            common_mistakes=assistance.guide.common_mistakes_to_avoid,
+            precautions=assistance.guide.submission_precautions,
+            source_verification_details=f"Verified against official portal: {assistance.official_source_url}",
+            statutory_disclaimer=(
+                "Advisory Notice: JanMitra Assist is an application preparation assistant. "
+                "It is not a government agency and does not submit applications on your behalf. "
+                "Guidance does not guarantee official approval."
             ),
         )

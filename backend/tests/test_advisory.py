@@ -19,15 +19,28 @@ from app.core.config import settings
 VALID_PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\ntrailer\n<<\n>>\n%%EOF"
 
 
-def get_auth_headers(client, mobile_number: str) -> dict:
-    """Authenticate citizen via mock OTP and return Bearer headers."""
-    res_otp = client.post("/api/v1/auth/send-otp", json={"mobile_number": mobile_number})
-    otp = res_otp.json()["dev_otp"]
-    res_verify = client.post(
-        "/api/v1/auth/verify-otp",
-        json={"mobile_number": mobile_number, "otp": otp},
+def get_auth_headers(client, mobile_number: str = "+919876543210") -> dict:
+    """Authenticate citizen via Email+Password and return Bearer headers."""
+    clean_id = "".join(c for c in mobile_number if c.isalnum()) or "default"
+    email = f"user_{clean_id}@example.com"
+    res_reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "Password@12345",
+            "confirm_password": "Password@12345",
+            "full_name": "Test Citizen",
+            "mobile_number": mobile_number,
+        },
     )
-    token = res_verify.json()["access_token"]
+    if res_reg.status_code == 201:
+        token = res_reg.json()["access_token"]
+    else:
+        res_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "Password@12345"},
+        )
+        token = res_login.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 

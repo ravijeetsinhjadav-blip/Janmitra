@@ -172,7 +172,9 @@ void main() {
       adapter.dispose();
     });
 
-    test('MockRazorpayAdapter calls onExternalWallet when simulateExternalWallet is true', () {
+    test(
+        'MockRazorpayAdapter calls onExternalWallet when simulateExternalWallet is true',
+        () {
       final adapter = MockRazorpayAdapter()
         ..simulateExternalWallet = true
         ..mockWalletName = 'paytm';
@@ -307,6 +309,94 @@ void main() {
       expect(find.text('Save ~33%'), findsOneWidget);
     });
 
+    testWidgets(
+        'SubscriptionPlansScreen renders Cancel Subscription button for Premium citizen',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final dummyPlans = SubscriptionPlansResponseModel(
+        plans: [
+          SubscriptionPlanModel(
+            planType: 'free',
+            name: 'Free Plan',
+            description: 'Basic scheme search and eligibility',
+            priceMonthly: 0.0,
+            priceYearly: 0.0,
+            currency: 'INR',
+            features: ['Basic scheme search'],
+            docAnalysesLimit: 3,
+            aiGuidanceLimit: 5,
+          ),
+          SubscriptionPlanModel(
+            planType: 'premium',
+            name: 'JanMitra Premium',
+            description: 'Advanced checks and higher limits',
+            priceMonthly: 99.0,
+            priceYearly: 799.0,
+            currency: 'INR',
+            features: ['Everything in Free'],
+            docAnalysesLimit: 30,
+            aiGuidanceLimit: 100,
+            isPopular: true,
+          ),
+        ],
+        disclaimer: 'Statutory disclaimer notice.',
+      );
+
+      final premiumSub = CitizenSubscriptionModel(
+        userId: 'test-premium-user',
+        planType: 'premium',
+        billingCycle: 'monthly',
+        status: 'active',
+        isActive: true,
+        startDate: DateTime.now(),
+        endDate: DateTime.now().add(const Duration(days: 25)),
+        daysRemaining: 25,
+        usage: UsageQuotaModel(
+          aiDocumentAnalysesUsed: 5,
+          aiDocumentAnalysesLimit: 30,
+          aiGuidanceSessionsUsed: 12,
+          aiGuidanceSessionsLimit: 100,
+          canAnalyzeDocument: true,
+          canRequestGuidance: true,
+          quotaResetDate: DateTime.now().add(const Duration(days: 20)),
+        ),
+        disclaimer: 'JanMitra Assist disclaimer',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SubscriptionPlansScreen(
+            initialPlans: dummyPlans,
+            initialSubscription: premiumSub,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('JanMitra Premium'), findsWidgets);
+      expect(find.text('Cancel Subscription'), findsOneWidget);
+      expect(find.text('Renew Subscription'), findsOneWidget);
+      expect(find.text('Renew / Extend'), findsOneWidget);
+
+      // Tap Cancel Subscription to verify dialog opens
+      await tester.tap(find.text('Cancel Subscription'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cancel Premium Subscription?'), findsOneWidget);
+      expect(find.text('Keep Subscription'), findsOneWidget);
+      expect(find.text('Confirm Cancellation'), findsOneWidget);
+
+      // Dismiss dialog
+      await tester.tap(find.text('Keep Subscription'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cancel Premium Subscription?'), findsNothing);
+    });
+
     testWidgets('PaymentSuccessScreen renders receipt and tier info',
         (WidgetTester tester) async {
       final verificationResult = PaymentVerificationResponseModel(
@@ -356,7 +446,8 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: PaymentFailureScreen(
-            errorMessage: 'Payment signature verification failed. Untrusted payment payload rejected.',
+            errorMessage:
+                'Payment signature verification failed. Untrusted payment payload rejected.',
             orderId: 'order_test_failure_123',
           ),
         ),
@@ -429,7 +520,8 @@ void main() {
       expect(find.text('FAILED'), findsOneWidget);
       expect(find.text('Method: UPI'), findsOneWidget);
       expect(find.text('Method: CARD'), findsOneWidget);
-      expect(find.text('Reason: Transaction declined by issuer'), findsOneWidget);
+      expect(
+          find.text('Reason: Transaction declined by issuer'), findsOneWidget);
     });
   });
 }

@@ -8,7 +8,8 @@ class RecommendedSchemesScreen extends StatefulWidget {
   const RecommendedSchemesScreen({super.key});
 
   @override
-  State<RecommendedSchemesScreen> createState() => _RecommendedSchemesScreenState();
+  State<RecommendedSchemesScreen> createState() =>
+      _RecommendedSchemesScreenState();
 }
 
 class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
@@ -95,7 +96,8 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.lightbulb_outline, size: 54, color: Colors.amber.shade700),
+              Icon(Icons.lightbulb_outline,
+                  size: 54, color: Colors.amber.shade700),
               const SizedBox(height: 12),
               const Text(
                 'No Specific Recommendations Yet',
@@ -131,7 +133,8 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline, size: 20, color: Colors.amber.shade900),
+                  Icon(Icons.info_outline,
+                      size: 20, color: Colors.amber.shade900),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -192,7 +195,8 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppTheme.accentGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
@@ -224,7 +228,8 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.auto_awesome, color: Colors.blue.shade800, size: 18),
+                    Icon(Icons.auto_awesome,
+                        color: Colors.blue.shade800, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -257,7 +262,8 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
                           color: AppTheme.primaryBlue,
                         ),
                       ),
-                      Icon(Icons.chevron_right, size: 16, color: AppTheme.primaryBlue),
+                      Icon(Icons.chevron_right,
+                          size: 16, color: AppTheme.primaryBlue),
                     ],
                   ),
                 ],
@@ -269,4 +275,3 @@ class _RecommendedSchemesScreenState extends State<RecommendedSchemesScreen> {
     );
   }
 }
-

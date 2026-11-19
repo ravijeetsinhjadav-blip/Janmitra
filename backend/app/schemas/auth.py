@@ -1,38 +1,49 @@
-import re
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
+from app.core.security import validate_password_strength
 
 
-class SendOTPRequest(BaseModel):
-    mobile_number: str = Field(..., description="10-digit Indian mobile number or with +91 prefix")
+class RegisterRequest(BaseModel):
+    email: EmailStr = Field(..., description="Citizen's primary email address")
+    password: str = Field(..., min_length=8, max_length=128, description="Strong password")
+    confirm_password: str = Field(..., min_length=8, max_length=128, description="Confirmation password")
+    full_name: str = Field(..., min_length=2, max_length=150, description="Citizen full name")
+    mobile_number: Optional[str] = Field(None, description="Optional contact mobile number")
 
-    @field_validator("mobile_number")
+    @field_validator("password")
     @classmethod
-    def validate_mobile(cls, v: str) -> str:
-        cleaned = "".join(ch for ch in v if ch.isdigit() or ch == "+")
-        digits_only = "".join(ch for ch in cleaned if ch.isdigit())
-        if len(digits_only) < 10:
-            raise ValueError("Mobile number must contain at least 10 digits")
-        if len(digits_only) == 10 and not digits_only.startswith(("6", "7", "8", "9")):
-            raise ValueError("Invalid Indian mobile number prefix (must start with 6-9)")
-        return v.strip()
+    def check_password_complexity(cls, v: str) -> str:
+        validate_password_strength(v)
+        return v
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
-class SendOTPResponse(BaseModel):
-    status: str = "success"
-    message: str
-    mobile_number: str
-    expires_in_seconds: int
-    resend_cooldown_seconds: int
-    dev_otp: Optional[str] = Field(
-        None,
-        description="Development-only OTP returned solely when OTP_DEV_MODE=True for testing without SMS charges",
-    )
+class LoginRequest(BaseModel):
+    email: EmailStr = Field(..., description="Registered email address")
+    password: str = Field(..., min_length=1, description="Password")
 
 
-class VerifyOTPRequest(BaseModel):
-    mobile_number: str = Field(..., description="Mobile number receiving the OTP")
-    otp: str = Field(..., min_length=4, max_length=8, description="Numeric OTP entered by citizen")
+class SetCredentialsRequest(BaseModel):
+    email: EmailStr = Field(..., description="New email address to link")
+    password: str = Field(..., min_length=8, max_length=128, description="New strong password")
+    confirm_password: str = Field(..., min_length=8, max_length=128, description="Confirmation password")
+
+    @field_validator("password")
+    @classmethod
+    def check_password_complexity(cls, v: str) -> str:
+        validate_password_strength(v)
+        return v
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class TokenResponse(BaseModel):
@@ -42,16 +53,18 @@ class TokenResponse(BaseModel):
     expires_in: int
     is_new_user: bool = False
     user_id: str
+    email: Optional[str] = None
     role: str
     profile_completed: bool = False
+    csrf_token: Optional[str] = None
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str = Field(..., description="Valid refresh token for session rotation")
+    refresh_token: Optional[str] = Field(None, description="Valid refresh token for session rotation (optional if provided via cookie)")
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: Optional[str] = Field(None, description="Specific refresh token to revoke")
+    refresh_token: Optional[str] = Field(None, description="Specific refresh token to revoke (optional if provided via cookie)")
     all_sessions: bool = Field(False, description="Whether to revoke all active sessions for user")
 
 
@@ -59,3 +72,34 @@ class MessageResponse(BaseModel):
     status: str = "success"
     message: str
 
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., description="Registered email address")
+
+
+class ForgotPasswordResponse(BaseModel):
+    status: str = "success"
+    message: str = "If an account with that email exists, password reset instructions have been sent."
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=16, description="Cryptographic password reset token from email link")
+    password: str = Field(..., min_length=8, max_length=128, description="New strong password")
+    confirm_password: str = Field(..., min_length=8, max_length=128, description="Confirmation of new password")
+
+    @field_validator("password")
+    @classmethod
+    def check_password_complexity(cls, v: str) -> str:
+        validate_password_strength(v)
+        return v
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class ResetPasswordResponse(BaseModel):
+    status: str = "success"
+    message: str = "Password has been successfully updated. Please sign in with your new password."

@@ -26,7 +26,7 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
     {'value': 'caste_certificate', 'label': 'Caste'},
     {'value': 'domicile_certificate', 'label': 'Domicile'},
     {'value': 'ration_card', 'label': 'Ration Card'},
-    {'value': 'aadhaar_card', 'label': 'Aadhaar'},
+    {'value': 'bank_passbook', 'label': 'Bank Passbook'},
     {'value': 'land_record', 'label': 'Land Record'},
   ];
 
@@ -70,8 +70,11 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
     );
 
     if (uploaded != null) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Uploaded ${uploaded.originalFilename} successfully.')),
+        SnackBar(
+            content:
+                Text('Uploaded ${uploaded.originalFilename} successfully.')),
       );
       _loadDocuments();
     }
@@ -79,9 +82,16 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ocrCompletedCount = _documents.where((d) => d.ocrStatus == DocumentProcessingStatus.ocrCompleted && !d.manualReviewRequired).length;
-    final reviewCount = _documents.where((d) => d.manualReviewRequired || d.ocrStatus == DocumentProcessingStatus.manualReviewRequired).length;
-
+    final ocrCompletedCount = _documents
+        .where((d) =>
+            d.ocrStatus == DocumentProcessingStatus.ocrCompleted &&
+            !d.manualReviewRequired)
+        .length;
+    final reviewCount = _documents
+        .where((d) =>
+            d.manualReviewRequired ||
+            d.ocrStatus == DocumentProcessingStatus.manualReviewRequired)
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -126,7 +136,6 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                       color: AppTheme.accentGreen,
                     ),
                   ),
-
                   Container(height: 36, width: 1, color: Colors.grey.shade300),
                   Expanded(
                     child: _buildSummaryItem(
@@ -159,7 +168,8 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                     selectedColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
                     labelStyle: TextStyle(
                       fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                       color: isSelected ? AppTheme.primaryBlue : Colors.black87,
                     ),
                     onSelected: (selected) {
@@ -184,12 +194,14 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
     );
   }
 
-  Widget _buildSummaryItem({required String label, required String value, required Color color}) {
+  Widget _buildSummaryItem(
+      {required String label, required String value, required Color color}) {
     return Column(
       children: [
         Text(
           value,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+          style: TextStyle(
+              fontSize: 18, fontWeight: FontWeight.bold, color: color),
         ),
         const SizedBox(height: 2),
         Text(
@@ -244,18 +256,23 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                   color: AppTheme.primaryBlue.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.folder_open, size: 56, color: AppTheme.primaryBlue),
+                child: const Icon(Icons.folder_open,
+                    size: 56, color: AppTheme.primaryBlue),
               ),
               const SizedBox(height: 16),
               const Text(
                 'Your Vault is Empty',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
               ),
               const SizedBox(height: 8),
               const Text(
                 'Upload your certificates, identity cards, and welfare documents to prepare for scheme eligibility checks.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.4),
+                style:
+                    TextStyle(fontSize: 13, color: Colors.black54, height: 1.4),
               ),
               const SizedBox(height: 20),
               ElevatedButton.icon(
@@ -264,7 +281,8 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryBlue,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
                 onPressed: _openUploadDialog,
               ),
@@ -284,7 +302,8 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
         return Card(
           elevation: 1,
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: () async {
@@ -307,7 +326,8 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                       color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(doc.iconData, color: AppTheme.primaryBlue, size: 24),
+                    child: Icon(doc.iconData,
+                        color: AppTheme.primaryBlue, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -316,12 +336,14 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                       children: [
                         Text(
                           doc.displayType,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           '${doc.originalFilename} • ${doc.formattedFileSize}',
-                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black54),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -329,7 +351,8 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: doc.statusColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
@@ -347,13 +370,15 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 '$confPercent% OCR',
-                                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.grey.shade600),
                               ),
                             ],
                             const Spacer(),
                             Text(
                               doc.formattedDate,
-                              style: const TextStyle(fontSize: 11, color: Colors.black38),
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black38),
                             ),
                           ],
                         ),
@@ -371,4 +396,3 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
     );
   }
 }
-

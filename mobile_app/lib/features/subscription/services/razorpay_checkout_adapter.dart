@@ -38,7 +38,8 @@ class LiveRazorpayAdapter implements RazorpayCheckoutAdapter {
   @override
   void open(Map<String, dynamic> options) {
     if (_razorpay == null) {
-      throw StateError('RazorpayCheckoutAdapter must be initialized before open()');
+      throw StateError(
+          'RazorpayCheckoutAdapter must be initialized before open()');
     }
     _razorpay!.open(options);
   }

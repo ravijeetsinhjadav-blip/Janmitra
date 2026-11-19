@@ -56,7 +56,6 @@ class PaymentFailureScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-
               if (orderId != null)
                 Container(
                   padding:
@@ -75,9 +74,7 @@ class PaymentFailureScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-
               const SizedBox(height: 28),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

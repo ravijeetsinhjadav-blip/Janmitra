@@ -1,14 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.janmitra.assist">
 
-    <!-- Permissions required for network access -->
+    <!-- Permissions required for network access and push notifications -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="JanMitra Assist"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Default Notification Channel for Firebase Cloud Messaging -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="janmitra_urgent_reminders" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -27,6 +32,22 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Deep Linking Intent Filter for Password Reset and Service Actions -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Custom Scheme: janmitra://reset-password -->
+                <data android:scheme="janmitra" android:host="reset-password" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Web URL scheme: http/https /reset-password -->
+                <data android:scheme="https" android:host="janmitra.internal" android:pathPrefix="/reset-password" />
+                <data android:scheme="http" android:host="127.0.0.1" android:port="8080" android:pathPrefix="/reset-password" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

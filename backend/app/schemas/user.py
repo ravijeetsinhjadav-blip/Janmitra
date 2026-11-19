@@ -51,8 +51,9 @@ class UserProfileResponse(UserProfileBase):
 class UserResponse(BaseModel):
     id: UUID
     role: str
-    mobile_number: Optional[str]
-    email: Optional[str]
+    mobile_number: Optional[str] = None
+    email: Optional[str] = None
+    has_password: Optional[bool] = False
     is_active: bool
     created_at: datetime
     profile: Optional[UserProfileResponse] = None

@@ -4,10 +4,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../models/scheme_models.dart';
 import '../services/scheme_service.dart';
 import 'eligibility_result_screen.dart';
+import 'widgets/scheme_beneficiary_analytics_widget.dart';
 import '../../documents/presentation/widgets/scheme_document_checklist_widget.dart';
 import '../../assistance/presentation/screens/application_assistance_screen.dart';
-
-
 
 class SchemeDetailsScreen extends StatefulWidget {
   final SchemeModel scheme;
@@ -63,34 +62,6 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Demo badge banner if demo data
-            if (scheme.isDemoData)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.science_outlined, color: Colors.amber.shade900, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'DEMO / TEST SCHEME: Curated for MCA major project verification.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
             // Title & Department
             Text(
               scheme.schemeName,
@@ -137,12 +108,14 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                   children: [
                     const Text(
                       'Overview',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       scheme.description,
-                      style: const TextStyle(fontSize: 13, height: 1.5, color: Colors.black87),
+                      style: const TextStyle(
+                          fontSize: 13, height: 1.5, color: Colors.black87),
                     ),
                   ],
                 ),
@@ -165,7 +138,8 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                           SizedBox(width: 6),
                           Text(
                             'Key Benefits',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -175,11 +149,14 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const Text('• ',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
                                 Expanded(
                                   child: Text(
                                     benefit,
-                                    style: const TextStyle(fontSize: 13, height: 1.4),
+                                    style: const TextStyle(
+                                        fontSize: 13, height: 1.4),
                                   ),
                                 ),
                               ],
@@ -205,14 +182,18 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                         SizedBox(width: 6),
                         Text(
                           'Eligibility Criteria',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       scheme.eligibilitySummary,
-                      style: const TextStyle(fontSize: 13, color: Colors.black87, fontStyle: FontStyle.italic),
+                      style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                          fontStyle: FontStyle.italic),
                     ),
                     const Divider(height: 20),
                     ...scheme.eligibilityCriteria.map((c) => Padding(
@@ -222,11 +203,15 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                             children: [
                               Text(
                                 c.conditionName,
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.bold),
                               ),
                               Text(
-                                c.explanation.isNotEmpty ? c.explanation : 'Condition rule on ${c.field}',
-                                style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                c.explanation.isNotEmpty
+                                    ? c.explanation
+                                    : 'Condition rule on ${c.field}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.black54),
                               ),
                             ],
                           ),
@@ -248,11 +233,13 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                     children: [
                       const Row(
                         children: [
-                          Icon(Icons.description, color: Colors.indigo, size: 20),
+                          Icon(Icons.description,
+                              color: Colors.indigo, size: 20),
                           SizedBox(width: 6),
                           Text(
                             'Required Document Types (Checklist)',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -266,7 +253,6 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                 ),
               ),
             const SizedBox(height: 12),
-
 
             // Application Process
             if (scheme.applicationProcess.isNotEmpty)
@@ -283,38 +269,43 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                           SizedBox(width: 6),
                           Text(
                             'How to Apply (Official Process)',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       const SizedBox(height: 10),
-                      ...scheme.applicationProcess.asMap().entries.map((entry) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  radius: 10,
-                                  backgroundColor: Colors.teal.shade50,
-                                  child: Text(
-                                    '${entry.key + 1}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.teal.shade800,
+                      ...scheme.applicationProcess
+                          .asMap()
+                          .entries
+                          .map((entry) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 10,
+                                      backgroundColor: Colors.teal.shade50,
+                                      child: Text(
+                                        '${entry.key + 1}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal.shade800,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        entry.value,
+                                        style: const TextStyle(
+                                            fontSize: 13, height: 1.4),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    entry.value,
-                                    style: const TextStyle(fontSize: 13, height: 1.4),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )),
+                              )),
                     ],
                   ),
                 ),
@@ -331,12 +322,14 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.verified, color: AppTheme.primaryBlue, size: 20),
+                        Icon(Icons.verified,
+                            color: AppTheme.primaryBlue, size: 20),
                         SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Verified Official Portals & Sources',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -352,7 +345,8 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                           bgColor = Colors.green.shade50;
                           borderColor = Colors.green.shade300;
                           textColor = Colors.green.shade800;
-                        } else if (scheme.sourceFreshnessStatus == 'Review Required') {
+                        } else if (scheme.sourceFreshnessStatus ==
+                            'Review Required') {
                           bgColor = Colors.amber.shade50;
                           borderColor = Colors.amber.shade400;
                           textColor = Colors.amber.shade900;
@@ -363,7 +357,8 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                         }
 
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: bgColor,
                             borderRadius: BorderRadius.circular(6),
@@ -383,39 +378,49 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                     const SizedBox(height: 10),
                     Text(
                       'Official Application Portal:\n${scheme.officialApplicationUrl}',
-                      style: const TextStyle(fontSize: 12, color: AppTheme.primaryBlue, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.primaryBlue,
+                          fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Official Guidelines Source:\n${scheme.officialSourceUrl}',
-                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.black87),
                     ),
                     if (scheme.eligibilitySourceReference != null) ...[
                       const SizedBox(height: 6),
                       Text(
                         'Eligibility Reference: ${scheme.eligibilitySourceReference}',
-                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54),
                       ),
                     ],
                     if (scheme.benefitsSourceReference != null) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Benefits Reference: ${scheme.benefitsSourceReference}',
-                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54),
                       ),
                     ],
                     if (scheme.sourceVerificationDetails != null) ...[
                       const SizedBox(height: 6),
                       Text(
                         'Verification Note: ${scheme.sourceVerificationDetails}',
-                        style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade700),
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.grey.shade700),
                       ),
                     ],
                     if (scheme.sourceLastVerifiedAt != null) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Last Verified: ${scheme.sourceLastVerifiedAt!.split("T").first}',
-                        style: const TextStyle(fontSize: 11, color: Colors.black45),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black45),
                       ),
                     ],
                     const SizedBox(height: 8),
@@ -423,7 +428,8 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                       icon: const Icon(Icons.copy, size: 16),
                       label: const Text('Copy Portal Link'),
                       onPressed: () {
-                        Clipboard.setData(ClipboardData(text: scheme.officialApplicationUrl));
+                        Clipboard.setData(
+                            ClipboardData(text: scheme.officialApplicationUrl));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Portal link copied!')),
                         );
@@ -433,6 +439,13 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // Section 5: Official Scheme Beneficiary Analytics
+            SchemeBeneficiaryAnalyticsWidget(
+              schemeId: scheme.id,
+              schemeName: scheme.schemeName,
+            ),
             const SizedBox(height: 24),
 
             // Prominent "Check My Eligibility" Action
@@ -441,20 +454,25 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.fact_check),
-              label: Text(_isAssessing ? 'Assessing Eligibility...' : 'Check My Eligibility'),
+              label: Text(_isAssessing
+                  ? 'Assessing Eligibility...'
+                  : 'Check My Eligibility'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.accentGreen,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                textStyle:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               onPressed: _isAssessing ? null : _handleCheckEligibility,
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              icon: const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.primaryBlue),
+              icon: const Icon(Icons.assignment_turned_in_outlined,
+                  color: AppTheme.primaryBlue),
               label: const Text('Prepare Application Guide & Checklist'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.primaryBlue,
@@ -498,4 +516,3 @@ class _SchemeDetailsScreenState extends State<SchemeDetailsScreen> {
     );
   }
 }
-

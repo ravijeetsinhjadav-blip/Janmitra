@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -68,7 +68,7 @@ class SubscriptionService:
                 features=[
                     "Everything in Free Plan",
                     f"Up to {settings.PREMIUM_MONTHLY_DOC_ANALYSES_LIMIT} AI document analyses per month",
-                    f"Expanded AI advisory guidance (fair-use safety ceiling: up to {settings.PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT} sessions per month; subject to confirmation)",
+                    "Personalized AI advisory guidance and scheme recommendations",
                     "Advanced document consistency & identity cross-checks",
                     "Priority application assistance with interactive checklists",
                     "Common mistakes alerts (merged bank IFSCs, spelling mismatches)",
@@ -212,7 +212,7 @@ class SubscriptionService:
         cls, db: Session, user_id: uuid.UUID, stale_seconds: int = 300, commit: bool = True
     ) -> int:
         """Auto-heal abandoned in-flight reservations (SEC-05, AUD-03).
-        
+
         Any DocumentMetadata record for this user remaining in PROCESSING or PENDING_OCR status
         whose lease has expired (lease_expires_at < now or created_at < now - stale_seconds)
         represents a crashed, killed, or abandoned worker. It is transitioned to OCR_FAILED and
@@ -362,7 +362,7 @@ class SubscriptionService:
         guidance_count = max(quota_record.guidance_sessions_used if quota_record else 0, live_guidance_count)
 
         can_analyze = (doc_count + in_flight_count) < doc_limit
-        can_guide = guidance_count < guidance_limit
+        can_guide = True if is_premium else (guidance_count < guidance_limit)
 
         return UsageQuotaStatus(
             ai_document_analyses_used=doc_count,
@@ -395,7 +395,7 @@ class SubscriptionService:
     @classmethod
     def reserve_document_analysis_quota(cls, db: Session, user_id: uuid.UUID) -> None:
         """Atomically verify and reserve 1 document analysis quota unit under row lock (SEC-05, SEC-06).
-        
+
         Serializes concurrent uploads and prevents TOCTOU race conditions.
         Counts both completed documents and active in-flight PROCESSING documents.
         """
@@ -588,7 +588,15 @@ class SubscriptionService:
 
     @classmethod
     def enforce_ai_guidance_quota(cls, db: Session, user_id: uuid.UUID) -> None:
-        """Raise 403 Forbidden if user has exceeded their monthly AI guidance session quota."""
+        """Raise 403 Forbidden if user has exceeded their monthly AI guidance session quota.
+
+        Enforces approved Free tier limit (5 sessions/month).
+        Active Premium citizens are entitled to AI advisory guidance and not blocked by any unapproved 100-session ceiling.
+        """
+        sub = cls.get_active_subscription(db, user_id)
+        if sub.plan_type == "premium" and sub.status == "active":
+            return
+
         quota = cls.get_quota_status(db, user_id)
         if not quota.can_request_guidance:
             logger.warning(
@@ -706,3 +714,111 @@ class SubscriptionService:
             f"Activated new premium subscription {new_sub.id} for user {user_id} until {new_sub.end_date}"
         )
         return new_sub
+
+    PREMIUM_ONLY_FEATURES = {
+        "advanced_document_consistency": "Advanced cross-document consistency checks and mismatch alerts",
+        "advanced_completeness_analysis": "Advanced multi-dimensional completeness optimization and readiness gap profiling",
+        "priority_assistance": "Priority preparation checklists and expedited portal routing",
+    }
+
+    @classmethod
+    def cancel_subscription(
+        cls, db: Session, user_id: uuid.UUID
+    ) -> Tuple[Subscription, bool]:
+        """Cancel an active Premium subscription for the citizen and revert to Free tier."""
+        sub = (
+            db.query(Subscription)
+            .filter(
+                Subscription.user_id == user_id,
+                Subscription.plan_type == "premium",
+                Subscription.status == "active",
+            )
+            .with_for_update()
+            .first()
+        )
+        if not sub:
+            past_sub = (
+                db.query(Subscription)
+                .filter(
+                    Subscription.user_id == user_id,
+                    Subscription.plan_type == "premium",
+                )
+                .order_by(Subscription.created_at.desc())
+                .first()
+            )
+            if past_sub and past_sub.status == "cancelled":
+                logger.info(
+                    f"User {user_id} requested cancellation for already-cancelled subscription {past_sub.id}. Returning idempotent success."
+                )
+                return past_sub, True
+            if past_sub and past_sub.status == "expired":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Subscription has already expired. Citizen is on Free tier.",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Premium subscription found to cancel.",
+            )
+        sub.status = "cancelled"
+        db.commit()
+        db.refresh(sub)
+        logger.info(f"User {user_id} cancelled premium subscription {sub.id}")
+        return sub, False
+
+    @classmethod
+    def get_subscription_history(
+        cls, db: Session, user_id: uuid.UUID
+    ) -> List[Subscription]:
+        """Return chronological list of all subscriptions for the citizen."""
+        return (
+            db.query(Subscription)
+            .filter(Subscription.user_id == user_id)
+            .order_by(Subscription.created_at.desc())
+            .all()
+        )
+
+    @classmethod
+    def check_feature_access(
+        cls, db: Session, user_id: uuid.UUID, feature_name: str
+    ) -> Dict[str, Any]:
+        """Check if citizen has active entitlement for a premium platform capability."""
+        sub = cls.get_active_subscription(db, user_id)
+        is_premium = sub.plan_type == "premium" and sub.status == "active"
+
+        if feature_name in cls.PREMIUM_ONLY_FEATURES:
+            if is_premium:
+                return {
+                    "feature": feature_name,
+                    "has_access": True,
+                    "plan_type": "premium",
+                    "upgrade_required": False,
+                    "message": f"Access granted: {cls.PREMIUM_ONLY_FEATURES[feature_name]}.",
+                }
+            else:
+                return {
+                    "feature": feature_name,
+                    "has_access": False,
+                    "plan_type": "free",
+                    "upgrade_required": True,
+                    "message": f"Upgrade to JanMitra Premium for ₹99/mo to unlock {cls.PREMIUM_ONLY_FEATURES[feature_name]}.",
+                }
+        return {
+            "feature": feature_name,
+            "has_access": True,
+            "plan_type": sub.plan_type,
+            "upgrade_required": False,
+            "message": "Access granted under current plan.",
+        }
+
+    @classmethod
+    def enforce_premium_feature(
+        cls, db: Session, user_id: uuid.UUID, feature_name: str
+    ) -> None:
+        """Raise HTTP 403 Forbidden with upgrade guidance if user is not on active Premium plan."""
+        res = cls.check_feature_access(db, user_id, feature_name)
+        if not res["has_access"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=res["message"],
+            )

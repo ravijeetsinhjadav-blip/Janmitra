@@ -231,7 +231,8 @@ class _ApplicationAssistanceScreenState
     }
 
     if (_assistance == null) {
-      return const Center(child: Text('No application assistance data available.'));
+      return const Center(
+          child: Text('No application assistance data available.'));
     }
 
     final data = _assistance!;
@@ -334,26 +335,6 @@ class _ApplicationAssistanceScreenState
                     ),
                   ),
                 ),
-                if (data.isDemoData)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.shade50,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.purple.shade300),
-                    ),
-                    child: Text(
-                      'DEMO DATA',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.purple.shade800,
-                      ),
-                    ),
-                  ),
               ],
             ),
             const SizedBox(height: 6),
@@ -458,7 +439,8 @@ class _ApplicationAssistanceScreenState
                 Expanded(
                   child: _buildMetricTile(
                     label: 'Criteria Match',
-                    value: '${data.criteriaMatchPercentage.toStringAsFixed(1)}%',
+                    value:
+                        '${data.criteriaMatchPercentage.toStringAsFixed(1)}%',
                     sublabel: 'Conditions satisfied',
                     color: AppTheme.accentGreen,
                   ),
@@ -613,86 +595,90 @@ class _ApplicationAssistanceScreenState
         color: item.isCompleted ? Colors.green.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: item.isCompleted ? Colors.green.shade200 : Colors.grey.shade300,
+          color:
+              item.isCompleted ? Colors.green.shade200 : Colors.grey.shade300,
         ),
       ),
       child: Material(
         color: Colors.transparent,
         child: CheckboxListTile(
           value: item.isCompleted,
-        onChanged: (val) {
-          if (val != null) {
-            _toggleChecklistItem(item, val);
-          }
-        },
-        activeColor: AppTheme.accentGreen,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                item.title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  decoration:
-                      item.isCompleted ? TextDecoration.lineThrough : null,
-                  color: item.isCompleted ? Colors.grey.shade600 : Colors.black87,
-                ),
-              ),
-            ),
-            if (item.isMandatory)
-              Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
+          onChanged: (val) {
+            if (val != null) {
+              _toggleChecklistItem(item, val);
+            }
+          },
+          activeColor: AppTheme.accentGreen,
+          title: Row(
+            children: [
+              Expanded(
                 child: Text(
-                  'Mandatory',
+                  item.title,
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Colors.red.shade800,
+                    decoration:
+                        item.isCompleted ? TextDecoration.lineThrough : null,
+                    color: item.isCompleted
+                        ? Colors.grey.shade600
+                        : Colors.black87,
                   ),
                 ),
               ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.description,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: item.isCompleted
-                      ? Colors.grey.shade500
-                      : Colors.grey.shade700,
-                  height: 1.25,
+              if (item.isMandatory)
+                Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Text(
+                    'Mandatory',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red.shade800,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Category: ${item.category.replaceAll('_', ' ').toUpperCase()}',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade500,
-                ),
-              ),
             ],
           ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.description,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: item.isCompleted
+                        ? Colors.grey.shade500
+                        : Colors.grey.shade700,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Category: ${item.category.replaceAll('_', ' ').toUpperCase()}',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
         ),
-        controlAffinity: ListTileControlAffinity.leading,
-        dense: true,
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildDocumentPreparationSection(ApplicationAssistanceModel data) {
     return Card(
@@ -728,7 +714,8 @@ class _ApplicationAssistanceScreenState
                     ).then((_) => _loadAssistance());
                   },
                   icon: const Icon(Icons.file_upload_outlined, size: 16),
-                  label: const Text('Open Vault', style: TextStyle(fontSize: 12)),
+                  label:
+                      const Text('Open Vault', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),
@@ -865,7 +852,8 @@ class _ApplicationAssistanceScreenState
                             Expanded(
                               child: Text(
                                 m,
-                                style: const TextStyle(fontSize: 12, height: 1.3),
+                                style:
+                                    const TextStyle(fontSize: 12, height: 1.3),
                               ),
                             ),
                           ],
@@ -898,7 +886,8 @@ class _ApplicationAssistanceScreenState
                             Expanded(
                               child: Text(
                                 p,
-                                style: const TextStyle(fontSize: 12, height: 1.3),
+                                style:
+                                    const TextStyle(fontSize: 12, height: 1.3),
                               ),
                             ),
                           ],
@@ -1032,7 +1021,8 @@ class _ApplicationAssistanceScreenState
                             Expanded(
                               child: Text(
                                 d,
-                                style: const TextStyle(fontSize: 12, height: 1.3),
+                                style:
+                                    const TextStyle(fontSize: 12, height: 1.3),
                               ),
                             ),
                           ],
@@ -1122,7 +1112,8 @@ class _ApplicationAssistanceScreenState
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             initiallyExpanded: true,
-            tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             childrenPadding:
                 const EdgeInsets.only(left: 14, right: 14, bottom: 12),
             leading: Icon(icon, color: iconColor, size: 22),
@@ -1203,7 +1194,8 @@ class _ApplicationAssistanceScreenState
                       );
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Official portal link copied to clipboard'),
+                          content:
+                              Text('Official portal link copied to clipboard'),
                           duration: Duration(seconds: 2),
                         ),
                       );

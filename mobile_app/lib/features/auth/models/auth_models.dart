@@ -7,6 +7,7 @@ class TokenResponseModel {
   final int expiresIn;
   final bool isNewUser;
   final String userId;
+  final String? email;
   final String role;
   final bool profileCompleted;
 
@@ -17,6 +18,7 @@ class TokenResponseModel {
     required this.expiresIn,
     required this.isNewUser,
     required this.userId,
+    this.email,
     required this.role,
     required this.profileCompleted,
   });
@@ -29,34 +31,9 @@ class TokenResponseModel {
       expiresIn: json['expires_in'] as int? ?? 1800,
       isNewUser: json['is_new_user'] as bool? ?? false,
       userId: json['user_id'] as String,
+      email: json['email'] as String?,
       role: json['role'] as String? ?? 'citizen',
       profileCompleted: json['profile_completed'] as bool? ?? false,
-    );
-  }
-}
-
-class SendOtpResponseModel {
-  final String status;
-  final String message;
-  final String? devOtp;
-  final int cooldownSeconds;
-  final int expiresInSeconds;
-
-  SendOtpResponseModel({
-    required this.status,
-    required this.message,
-    this.devOtp,
-    required this.cooldownSeconds,
-    required this.expiresInSeconds,
-  });
-
-  factory SendOtpResponseModel.fromJson(Map<String, dynamic> json) {
-    return SendOtpResponseModel(
-      status: json['status'] as String? ?? 'success',
-      message: json['message'] as String? ?? '',
-      devOtp: json['dev_otp'] as String?,
-      cooldownSeconds: json['cooldown_seconds'] as int? ?? 60,
-      expiresInSeconds: json['expires_in_seconds'] as int? ?? 300,
     );
   }
 }
@@ -65,6 +42,7 @@ class UserModel {
   final String id;
   final String? mobileNumber;
   final String? email;
+  final bool hasPassword;
   final String role;
   final bool isActive;
   final UserProfileModel? profile;
@@ -73,6 +51,7 @@ class UserModel {
     required this.id,
     this.mobileNumber,
     this.email,
+    this.hasPassword = false,
     required this.role,
     required this.isActive,
     this.profile,
@@ -83,6 +62,7 @@ class UserModel {
       id: json['id'] as String,
       mobileNumber: json['mobile_number'] as String?,
       email: json['email'] as String?,
+      hasPassword: json['has_password'] as bool? ?? false,
       role: json['role'] as String? ?? 'citizen',
       isActive: json['is_active'] as bool? ?? true,
       profile: json['profile'] != null
@@ -91,4 +71,3 @@ class UserModel {
     );
   }
 }
-

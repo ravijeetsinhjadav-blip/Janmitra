@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/network/api_endpoints.dart';
 import '../../../core/services/secure_storage_service.dart';
 import '../models/scheme_models.dart';
+import '../models/scheme_intelligence_models.dart';
 
 class SchemeService {
   static final SchemeService _instance = SchemeService._internal();
@@ -61,19 +62,23 @@ class SchemeService {
         throw Exception(message);
       }
     } on SocketException {
-      throw Exception('Cannot connect to JanMitra server. Check your network or backend service.');
+      throw Exception(
+          'Cannot connect to JanMitra server. Check your network or backend service.');
     }
   }
 
   /// Get aggregated scheme categories
   Future<List<SchemeCategoryModel>> getCategories() async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeCategories}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeCategories}');
     try {
       final headers = await _buildHeaders();
       final response = await http.get(uri, headers: headers);
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List<dynamic>;
-        return list.map((e) => SchemeCategoryModel.fromJson(e as Map<String, dynamic>)).toList();
+        return list
+            .map((e) => SchemeCategoryModel.fromJson(e as Map<String, dynamic>))
+            .toList();
       } else {
         throw Exception('Failed to load scheme categories');
       }
@@ -84,7 +89,8 @@ class SchemeService {
 
   /// Get complete details of a single scheme
   Future<SchemeModel> getSchemeById(String schemeId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeDetail(schemeId)}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeDetail(schemeId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.get(uri, headers: headers);
@@ -103,14 +109,18 @@ class SchemeService {
 
   /// Fetch tailored scheme recommendations based on citizen profile
   Future<List<SchemeRecommendationModel>> getRecommendations() async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeRecommendations}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeRecommendations}');
     try {
       final headers = await _buildHeaders();
       final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List<dynamic>;
-        return list.map((e) => SchemeRecommendationModel.fromJson(e as Map<String, dynamic>)).toList();
+        return list
+            .map((e) =>
+                SchemeRecommendationModel.fromJson(e as Map<String, dynamic>))
+            .toList();
       } else {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         throw Exception(data['detail'] ?? 'Failed to load recommendations.');
@@ -122,7 +132,8 @@ class SchemeService {
 
   /// Run deterministic eligibility assessment for authenticated citizen
   Future<AssessmentResultModel> runAssessment(String schemeId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAssess(schemeId)}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAssess(schemeId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.post(uri, headers: headers);
@@ -131,7 +142,8 @@ class SchemeService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return AssessmentResultModel.fromJson(data);
       } else {
-        final message = data['detail'] ?? 'Failed to execute eligibility assessment.';
+        final message =
+            data['detail'] ?? 'Failed to execute eligibility assessment.';
         throw Exception(message);
       }
     } on SocketException {
@@ -148,7 +160,8 @@ class SchemeService {
       'page': page.toString(),
       'page_size': pageSize.toString(),
     };
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAssessmentsHistory}')
+    final uri = Uri.parse(
+            '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAssessmentsHistory}')
         .replace(queryParameters: queryParams);
 
     try {
@@ -157,7 +170,10 @@ class SchemeService {
 
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List<dynamic>;
-        return list.map((e) => AssessmentHistoryItemModel.fromJson(e as Map<String, dynamic>)).toList();
+        return list
+            .map((e) =>
+                AssessmentHistoryItemModel.fromJson(e as Map<String, dynamic>))
+            .toList();
       } else {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         throw Exception(data['detail'] ?? 'Failed to load assessment history.');
@@ -169,7 +185,8 @@ class SchemeService {
 
   /// Retrieve detailed past assessment result
   Future<AssessmentResultModel> getAssessmentDetail(String assessmentId) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAssessmentDetail(assessmentId)}');
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAssessmentDetail(assessmentId)}');
     try {
       final headers = await _buildHeaders();
       final response = await http.get(uri, headers: headers);
@@ -184,5 +201,128 @@ class SchemeService {
       throw Exception('Cannot connect to JanMitra server.');
     }
   }
-}
 
+  /// Retrieve available category filter options for a scheme
+  Future<List<String>> getSchemeCategoriesList(String schemeId) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeCategoriesList(schemeId)}');
+    try {
+      final headers = await _buildHeaders();
+      final response = await http.get(uri, headers: headers);
+      if (response.statusCode == 200) {
+        final list = jsonDecode(response.body) as List<dynamic>;
+        return list.map((e) => e.toString()).toList();
+      }
+      return ['All', 'General', 'OBC', 'SC', 'ST', 'EWS'];
+    } catch (_) {
+      return ['All', 'General', 'OBC', 'SC', 'ST', 'EWS'];
+    }
+  }
+
+  /// Retrieve category-specific document requirements for a scheme
+  Future<List<SchemeCategoryDocumentModel>> getSchemeCategoryDocuments(
+    String schemeId, {
+    String? category,
+  }) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeCategoryDocuments(schemeId, category: category)}');
+    try {
+      final headers = await _buildHeaders();
+      final response = await http.get(uri, headers: headers);
+      if (response.statusCode == 200) {
+        final list = jsonDecode(response.body) as List<dynamic>;
+        return list
+            .map((e) => SchemeCategoryDocumentModel.fromJson(
+                e as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Retrieve category-specific eligibility rules for a scheme
+  Future<List<SchemeCategoryRuleModel>> getSchemeCategoryRules(
+    String schemeId, {
+    String? category,
+  }) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeCategoryRules(schemeId, category: category)}');
+    try {
+      final headers = await _buildHeaders();
+      final response = await http.get(uri, headers: headers);
+      if (response.statusCode == 200) {
+        final list = jsonDecode(response.body) as List<dynamic>;
+        return list
+            .map((e) =>
+                SchemeCategoryRuleModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Retrieve official verified beneficiary analytics dataset for a scheme
+  Future<SchemeAnalyticsDatasetModel?> getSchemeAnalytics(String schemeId) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeAnalytics(schemeId)}');
+    try {
+      final headers = await _buildHeaders();
+      final response = await http.get(uri, headers: headers);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return SchemeAnalyticsDatasetModel.fromJson(data);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Retrieve step-by-step issuance guide for an official document/certificate
+  Future<DocumentGuideModel?> getDocumentGuide(String documentType) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.documentGuideDetail(documentType)}');
+    try {
+      final headers = await _buildHeaders();
+      final response = await http.get(uri, headers: headers);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return DocumentGuideModel.fromJson(data);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Evaluate category rules on-demand without storing caste to user profile
+  Future<Map<String, dynamic>> evaluateCategoryRules({
+    required String schemeId,
+    required String category,
+    required Map<String, dynamic> profileData,
+  }) async {
+    final uri = Uri.parse(
+        '${ApiEndpoints.baseUrl}${ApiEndpoints.schemeEvaluateCategory(schemeId)}');
+    try {
+      final headers = await _buildHeaders();
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: jsonEncode({
+          'category': category,
+          'profile_data': profileData,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return {'is_category_eligible': true, 'evaluations': []};
+    } catch (_) {
+      return {'is_category_eligible': true, 'evaluations': []};
+    }
+  }
+}

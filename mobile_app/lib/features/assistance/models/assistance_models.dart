@@ -21,11 +21,11 @@ class DocumentPreparationStatusModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'document_name': documentName,
-    'status': status,
-    'notes': notes,
-    'matching_document_id': matchingDocumentId,
-  };
+        'document_name': documentName,
+        'status': status,
+        'notes': notes,
+        'matching_document_id': matchingDocumentId,
+      };
 }
 
 class ChecklistItemModel {
@@ -57,13 +57,13 @@ class ChecklistItemModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'item_id': itemId,
-    'category': category,
-    'title': title,
-    'description': description,
-    'is_mandatory': isMandatory,
-    'is_completed': isCompleted,
-  };
+        'item_id': itemId,
+        'category': category,
+        'title': title,
+        'description': description,
+        'is_mandatory': isMandatory,
+        'is_completed': isCompleted,
+      };
 }
 
 class ApplicantInfoRequirementModel {
@@ -86,10 +86,10 @@ class ApplicantInfoRequirementModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'field_name': fieldName,
-    'description': description,
-    'importance': importance,
-  };
+        'field_name': fieldName,
+        'description': description,
+        'importance': importance,
+      };
 }
 
 class SupportingDocumentSpecModel {
@@ -112,10 +112,10 @@ class SupportingDocumentSpecModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'document_type': documentType,
-    'specifications': specifications,
-    'issuing_authority': issuingAuthority,
-  };
+        'document_type': documentType,
+        'specifications': specifications,
+        'issuing_authority': issuingAuthority,
+      };
 }
 
 class PortalStepInstructionModel {
@@ -138,10 +138,10 @@ class PortalStepInstructionModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'step_number': stepNumber,
-    'title': title,
-    'instruction': instruction,
-  };
+        'step_number': stepNumber,
+        'title': title,
+        'instruction': instruction,
+      };
 }
 
 class ApplicationInfoGuideModel {
@@ -178,25 +178,23 @@ class ApplicationInfoGuideModel {
           [],
       supportingDocumentsSpecs:
           (json['supporting_documents_specs'] as List<dynamic>?)
-              ?.map(
-                (e) => SupportingDocumentSpecModel.fromJson(
-                  e as Map<String, dynamic>,
-                ),
-              )
-              .toList() ??
-          [],
-      importantDeclarations:
-          (json['important_declarations'] as List<dynamic>?)
+                  ?.map(
+                    (e) => SupportingDocumentSpecModel.fromJson(
+                      e as Map<String, dynamic>,
+                    ),
+                  )
+                  .toList() ??
+              [],
+      importantDeclarations: (json['important_declarations'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
       commonMistakesToAvoid:
           (json['common_mistakes_to_avoid'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
-      submissionPrecautions:
-          (json['submission_precautions'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [],
+      submissionPrecautions: (json['submission_precautions'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -328,8 +326,8 @@ class ApplicationAssistanceModel {
       guide: ApplicationInfoGuideModel.fromJson(
         json['guide'] as Map<String, dynamic>? ?? {},
       ),
-      officialApplicationUrl:
-          json['official_application_url'] as String? ?? 'https://myscheme.gov.in/',
+      officialApplicationUrl: json['official_application_url'] as String? ??
+          'https://myscheme.gov.in/',
       officialSourceUrl:
           json['official_source_url'] as String? ?? 'https://myscheme.gov.in/',
       isDemoData: json['is_demo_data'] as bool? ?? true,
@@ -339,7 +337,7 @@ class ApplicationAssistanceModel {
           : DateTime.now(),
       disclaimer: json['disclaimer'] as String? ??
           'Advisory Notice: JanMitra Assist is an application preparation assistant. '
-          'It does NOT replace official government portals or submit applications on your behalf.',
+              'It does NOT replace official government portals or submit applications on your behalf.',
     );
   }
 }

@@ -1,5 +1,6 @@
+import hmac
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -12,21 +13,47 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """FastAPI dependency to extract and authenticate current user from Bearer JWT.
+    """FastAPI dependency to extract and authenticate current user from Bearer JWT or HttpOnly session cookie.
     
-    Raises 401 Unauthorized if missing, expired, invalid, or account is deactivated.
+    1. If an 'Authorization: Bearer <token>' header is present (mobile/API clients), it is authenticated directly.
+    2. If no Bearer header is present, falls back to the HttpOnly 'access_token_cookie' (browser clients).
+       For cookie-authenticated state-changing requests (POST, PUT, PATCH, DELETE), validates the 'X-CSRF-Token' header
+       against the 'csrf_token_cookie'.
+    3. Raises 401 Unauthorized if missing, expired, or invalid.
+    4. Raises 403 Forbidden if CSRF token is missing/invalid, or if the user account is deactivated.
     """
-    if not credentials or not credentials.credentials:
+    token: Optional[str] = None
+    is_cookie_auth = False
+
+    if credentials and credentials.credentials:
+        token = credentials.credentials
+    else:
+        cookie_token = request.cookies.get("access_token_cookie")
+        if cookie_token:
+            token = cookie_token
+            is_cookie_auth = True
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required. Please provide a Bearer access token.",
+            detail="Authentication required. Please provide a Bearer access token or sign in.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token = credentials.credentials
+    # If authenticated via browser cookie, enforce CSRF protection on mutating methods
+    if is_cookie_auth and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        csrf_header = request.headers.get("x-csrf-token")
+        csrf_cookie = request.cookies.get("csrf_token_cookie")
+        if not csrf_header or not csrf_cookie or not hmac.compare_digest(csrf_header, csrf_cookie):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF validation failed: Missing or invalid X-CSRF-Token header.",
+            )
+
     payload = decode_access_token(token)
     user_id_str = payload.get("sub")
 

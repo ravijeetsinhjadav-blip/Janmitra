@@ -10,8 +10,8 @@ from app.core.config import settings
 from app.core.database import Base
 from app.models.user import User
 from app.models.profile import UserProfile
-from app.models.otp import OTPChallenge
 from app.models.session import UserSession
+from app.models.password_reset import PasswordResetToken
 from app.models.account_deletion import AccountDeletionRequest
 from app.models.assessment import Assessment
 from app.core.security import hash_token
@@ -33,13 +33,17 @@ class TestPostgresDialectCompatibility:
             "document_metadata",
             "assessments",
             "applications",
+            "application_status_history",
+            "application_reminders",
             "subscriptions",
             "user_monthly_quotas",
             "payment_transactions",
             "webhook_events",
             "notifications",
+            "device_tokens",
             "otp_challenges",
             "user_sessions",
+            "password_reset_tokens",
             "account_deletion_requests",
         ]
 
@@ -67,6 +71,13 @@ class TestPostgresDialectCompatibility:
         deletion_table = Base.metadata.tables["account_deletion_requests"]
         del_ddl = str(CreateTable(deletion_table).compile(dialect=pg_dialect))
         assert "FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE" in del_ddl
+
+    def test_postgresql_users_email_password_ddl(self):
+        pg_dialect = postgresql.dialect()
+        users_table = Base.metadata.tables["users"]
+        users_ddl = str(CreateTable(users_table).compile(dialect=pg_dialect))
+        assert "password_hash VARCHAR(255)" in users_ddl
+        assert "email VARCHAR(255)" in users_ddl
 
     def test_postgresql_payment_and_quota_ledger_ddl(self):
         pg_dialect = postgresql.dialect()
@@ -103,7 +114,12 @@ class TestPostgresLiveIntegration:
 
     @pytest.fixture(scope="class")
     def pg_engine(self):
-        test_pg_url = os.environ.get("TEST_POSTGRES_URL", settings.DATABASE_URL)
+        test_pg_url = os.environ.get("TEST_POSTGRES_URL") or settings.sync_database_url
+        if test_pg_url:
+            if test_pg_url.startswith("postgresql://"):
+                test_pg_url = test_pg_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            elif test_pg_url.startswith("postgres://"):
+                test_pg_url = test_pg_url.replace("postgres://", "postgresql+psycopg://", 1)
         try:
             engine = create_engine(
                 test_pg_url,
@@ -119,7 +135,7 @@ class TestPostgresLiveIntegration:
                 "Skipping live PostgreSQL integration tests."
             )
 
-    def test_live_postgres_otp_and_session_persistence(self, pg_engine):
+    def test_live_postgres_auth_and_session_persistence(self, pg_engine):
         from sqlalchemy.orm import sessionmaker
         SessionLocal = sessionmaker(bind=pg_engine)
         db = SessionLocal()
@@ -135,18 +151,16 @@ class TestPostgresLiveIntegration:
             db.add(test_user)
             db.flush()
 
-            # Create OTP challenge
+            # Create Password Reset Token
             now = datetime.now(timezone.utc)
-            otp_record = OTPChallenge(
-                mobile_number=phone,
-                hashed_otp=hash_token("654321"),
-                purpose="auth",
-                expires_at=now + timedelta(minutes=5),
-                attempts=0,
-                max_attempts=3,
-                is_verified=False,
+            reset_record = PasswordResetToken(
+                id=uuid.uuid4(),
+                user_id=test_user.id,
+                token_hash=hash_token(f"test_reset_token_{uuid.uuid4().hex}"),
+                expires_at=now + timedelta(minutes=15),
+                is_used=False,
             )
-            db.add(otp_record)
+            db.add(reset_record)
 
             # Create User session with hashed refresh token
             token_hash = hash_token(f"test_refresh_token_entropy_string_{uuid.uuid4().hex}")
@@ -176,9 +190,9 @@ class TestPostgresLiveIntegration:
             assert queried_session.user_id == test_user.id
             assert queried_session.is_revoked is False
 
-            queried_otp = db.query(OTPChallenge).filter(OTPChallenge.mobile_number == phone).first()
-            assert queried_otp is not None
-            assert queried_otp.is_verified is False
+            queried_reset = db.query(PasswordResetToken).filter(PasswordResetToken.user_id == test_user.id).first()
+            assert queried_reset is not None
+            assert queried_reset.is_used is False
 
             queried_del = db.query(AccountDeletionRequest).filter(AccountDeletionRequest.user_id == test_user.id).first()
             assert queried_del is not None
@@ -187,6 +201,20 @@ class TestPostgresLiveIntegration:
         finally:
             db.rollback()
             db.close()
+
+    def test_live_postgres_no_aadhaar_columns_in_physical_schema(self, pg_engine):
+        """Read-only physical inspection of information_schema.columns: confirms 0 Aadhaar columns in PostgreSQL."""
+        with pg_engine.connect() as conn:
+            query = text("""
+                SELECT table_name, column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+            """)
+            rows = conn.execute(query).fetchall()
+
+        assert len(rows) > 0, "No tables/columns found in public schema."
+        forbidden = [f"{r[0]}.{r[1]}" for r in rows if "aadhaar" in r[1].lower() or "uidai" in r[1].lower()]
+        assert len(forbidden) == 0, f"Forbidden Aadhaar column detected in physical PostgreSQL schema: {forbidden}"
 
 
 class TestPostgresConcurrencyLive:
@@ -198,7 +226,12 @@ class TestPostgresConcurrencyLive:
 
     @pytest.fixture(scope="class")
     def pg_sessionmaker(self):
-        test_pg_url = os.environ.get("TEST_POSTGRES_URL", settings.DATABASE_URL)
+        test_pg_url = os.environ.get("TEST_POSTGRES_URL") or settings.sync_database_url
+        if test_pg_url:
+            if test_pg_url.startswith("postgresql://"):
+                test_pg_url = test_pg_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            elif test_pg_url.startswith("postgres://"):
+                test_pg_url = test_pg_url.replace("postgres://", "postgresql+psycopg://", 1)
         try:
             engine = create_engine(
                 test_pg_url,
@@ -596,5 +629,483 @@ class TestPostgresConcurrencyLive:
         # Document record remains unchanged
         db.refresh(doc)
         assert doc.ocr_status == DocumentProcessingStatus.OCR_FAILED
+        db.close()
+
+    def test_concurrent_reminder_claiming_skip_locked_postgres(self, pg_sessionmaker):
+        """Verify multiple workers attempting to claim the same reminder using SELECT FOR UPDATE SKIP LOCKED."""
+        from concurrent.futures import ThreadPoolExecutor
+        from app.models.scheme import Scheme
+        from app.models.application import Application, ApplicationReminder
+        from app.services.reminder_scheduler import ReminderSchedulerService
+
+        user_id = uuid.uuid4()
+        scheme_id = uuid.uuid4()
+        app_id = uuid.uuid4()
+        rem_id = uuid.uuid4()
+
+        db_init = pg_sessionmaker()
+        try:
+            test_user = User(
+                id=user_id,
+                role="citizen",
+                mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+                is_active=True,
+            )
+            db_init.add(test_user)
+
+            scheme = Scheme(
+                id=scheme_id,
+                scheme_name=f"Postgres Concurrency Scheme {uuid.uuid4().hex[:6]}",
+                description="Scheme description for testing",
+                eligibility_summary="Eligibility test summary",
+                department="Agriculture",
+                category="financial",
+                state_applicability="All India",
+                official_source_url="https://india.gov.in/scheme",
+                official_application_url="https://service.india.gov.in",
+                is_active=True,
+            )
+            db_init.add(scheme)
+
+            app = Application(
+                id=app_id,
+                user_id=user_id,
+                scheme_id=scheme_id,
+                application_reference_number=f"APP-PG-{uuid.uuid4().hex[:8]}",
+                status="submitted",
+            )
+            db_init.add(app)
+
+            now = datetime.now(timezone.utc)
+            reminder = ApplicationReminder(
+                id=rem_id,
+                application_id=app_id,
+                user_id=user_id,
+                title="Postgres Multi-Worker Reminder",
+                reminder_date=now - timedelta(hours=1),
+                is_completed=False,
+                retry_count=0,
+            )
+            db_init.add(reminder)
+            db_init.commit()
+        finally:
+            db_init.close()
+
+        try:
+            def worker_claim(idx):
+                db = pg_sessionmaker()
+                try:
+                    worker_id = f"pg_worker_{idx}_{uuid.uuid4().hex[:4]}"
+                    return ReminderSchedulerService.claim_reminder(
+                        db=db,
+                        reminder_id=rem_id,
+                        worker_token=worker_id,
+                        now=datetime.now(timezone.utc),
+                    )
+                finally:
+                    db.close()
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                outcomes = list(executor.map(worker_claim, range(5)))
+
+            # Exactly 1 worker should succeed, 4 should fail/skip
+            assert outcomes.count(True) == 1
+            assert outcomes.count(False) == 4
+
+            # Verify DB state: reminder is leased to exactly one worker
+            db_check = pg_sessionmaker()
+            try:
+                rem_db = db_check.query(ApplicationReminder).filter(ApplicationReminder.id == rem_id).first()
+                assert rem_db.dispatch_token is not None
+                assert rem_db.dispatch_lease_until is not None
+                assert rem_db.dispatch_lease_until > datetime.now(timezone.utc)
+            finally:
+                db_check.close()
+        finally:
+            db_clean = pg_sessionmaker()
+            try:
+                db_clean.query(ApplicationReminder).filter(ApplicationReminder.id == rem_id).delete(synchronize_session=False)
+                db_clean.query(Application).filter(Application.id == app_id).delete(synchronize_session=False)
+                db_clean.query(Scheme).filter(Scheme.id == scheme_id).delete(synchronize_session=False)
+                db_clean.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+                db_clean.commit()
+            except Exception:
+                db_clean.rollback()
+            finally:
+                db_clean.close()
+
+    def test_live_postgres_reminder_lease_expiry_and_recovery(self, pg_sessionmaker):
+        """Simulate an abandoned lease; verify second worker successfully reclaims after expiration on live PostgreSQL."""
+        from app.models.scheme import Scheme
+        from app.models.application import Application, ApplicationReminder
+        from app.services.reminder_scheduler import ReminderSchedulerService
+
+        user_id = uuid.uuid4()
+        scheme_id = uuid.uuid4()
+        app_id = uuid.uuid4()
+        rem_id = uuid.uuid4()
+
+        db_init = pg_sessionmaker()
+        try:
+            test_user = User(
+                id=user_id,
+                role="citizen",
+                mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+                is_active=True,
+            )
+            db_init.add(test_user)
+
+            scheme = Scheme(
+                id=scheme_id,
+                scheme_name=f"Postgres Lease Expiry Scheme {uuid.uuid4().hex[:6]}",
+                description="Scheme description for testing",
+                eligibility_summary="Eligibility test summary",
+                department="Education",
+                category="scholarship",
+                state_applicability="All India",
+                official_source_url="https://india.gov.in/scheme",
+                official_application_url="https://service.india.gov.in",
+                is_active=True,
+            )
+            db_init.add(scheme)
+
+            app = Application(
+                id=app_id,
+                user_id=user_id,
+                scheme_id=scheme_id,
+                application_reference_number=f"APP-LEASE-{uuid.uuid4().hex[:8]}",
+                status="submitted",
+            )
+            db_init.add(app)
+
+            now = datetime.now(timezone.utc)
+            # Seed reminder with an expired lease from a crashed worker
+            reminder = ApplicationReminder(
+                id=rem_id,
+                application_id=app_id,
+                user_id=user_id,
+                title="Crashed Worker Reminder",
+                reminder_date=now - timedelta(hours=2),
+                is_completed=False,
+                dispatch_token="dead_worker_token",
+                dispatch_lease_until=now - timedelta(minutes=5),  # expired 5 mins ago
+                retry_count=0,
+            )
+            db_init.add(reminder)
+            db_init.commit()
+        finally:
+            db_init.close()
+
+        try:
+            # New worker attempts to claim
+            db_claim = pg_sessionmaker()
+            try:
+                new_worker_token = "alive_worker_token"
+                claimed = ReminderSchedulerService.claim_reminder(
+                    db=db_claim,
+                    reminder_id=rem_id,
+                    worker_token=new_worker_token,
+                    now=now,
+                )
+                assert claimed is True
+            finally:
+                db_claim.close()
+
+            # Check DB reflects new worker ownership
+            db_check = pg_sessionmaker()
+            try:
+                rem_db = db_check.query(ApplicationReminder).filter(ApplicationReminder.id == rem_id).first()
+                assert rem_db.dispatch_token == new_worker_token
+                assert rem_db.dispatch_lease_until > now
+            finally:
+                db_check.close()
+        finally:
+            db_clean = pg_sessionmaker()
+            try:
+                db_clean.query(ApplicationReminder).filter(ApplicationReminder.id == rem_id).delete(synchronize_session=False)
+                db_clean.query(Application).filter(Application.id == app_id).delete(synchronize_session=False)
+                db_clean.query(Scheme).filter(Scheme.id == scheme_id).delete(synchronize_session=False)
+                db_clean.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+                db_clean.commit()
+            except Exception:
+                db_clean.rollback()
+            finally:
+                db_clean.close()
+
+    def test_live_postgres_reminder_retry_exhaustion_and_idempotency(self, pg_sessionmaker):
+        """Verify reminder retry backoff exhaustion and finalization idempotency on live PostgreSQL."""
+        from app.models.scheme import Scheme
+        from app.models.application import Application, ApplicationReminder
+        from app.services.reminder_scheduler import ReminderSchedulerService
+
+        user_id = uuid.uuid4()
+        scheme_id = uuid.uuid4()
+        app_id = uuid.uuid4()
+        rem_id = uuid.uuid4()
+
+        db_init = pg_sessionmaker()
+        try:
+            test_user = User(
+                id=user_id,
+                role="citizen",
+                mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+                is_active=True,
+            )
+            db_init.add(test_user)
+
+            scheme = Scheme(
+                id=scheme_id,
+                scheme_name=f"Postgres Retry Scheme {uuid.uuid4().hex[:6]}",
+                description="Scheme description for testing",
+                eligibility_summary="Eligibility test summary",
+                department="Health",
+                category="health",
+                state_applicability="All India",
+                official_source_url="https://india.gov.in/scheme",
+                official_application_url="https://service.india.gov.in",
+                is_active=True,
+            )
+            db_init.add(scheme)
+
+            app = Application(
+                id=app_id,
+                user_id=user_id,
+                scheme_id=scheme_id,
+                application_reference_number=f"APP-RETRY-{uuid.uuid4().hex[:8]}",
+                status="submitted",
+            )
+            db_init.add(app)
+
+            now = datetime.now(timezone.utc)
+            # Reminder with retry_count = 3 (MAX_RETRIES)
+            reminder = ApplicationReminder(
+                id=rem_id,
+                application_id=app_id,
+                user_id=user_id,
+                title="Max Retries Exhausted",
+                reminder_date=now - timedelta(hours=1),
+                is_completed=False,
+                retry_count=3,
+            )
+            db_init.add(reminder)
+            db_init.commit()
+        finally:
+            db_init.close()
+
+        try:
+            # Claim attempt must fail
+            db_claim = pg_sessionmaker()
+            try:
+                claimed = ReminderSchedulerService.claim_reminder(
+                    db=db_claim,
+                    reminder_id=rem_id,
+                    worker_token="worker_will_fail",
+                    now=now,
+                )
+                assert claimed is False
+            finally:
+                db_claim.close()
+        finally:
+            db_clean = pg_sessionmaker()
+            try:
+                db_clean.query(ApplicationReminder).filter(ApplicationReminder.id == rem_id).delete(synchronize_session=False)
+                db_clean.query(Application).filter(Application.id == app_id).delete(synchronize_session=False)
+                db_clean.query(Scheme).filter(Scheme.id == scheme_id).delete(synchronize_session=False)
+                db_clean.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+                db_clean.commit()
+            except Exception:
+                db_clean.rollback()
+            finally:
+                db_clean.close()
+
+    def test_live_postgres_concurrent_payment_verification_and_webhook_race(self, pg_sessionmaker):
+        """Phase 7: Live PostgreSQL concurrency test verifying race-condition safety between
+        PaymentService.verify_and_capture_payment() and PaymentService.process_webhook().
+        Multi-worker with_for_update() pessimistic row locking ensures exactly 1 successful activation,
+        the other receives an idempotent duplicate/success response, and exactly 1 active subscription is created.
+        Strict try...finally ensures all test-created UUID records are cleaned up.
+        """
+        import hmac
+        import hashlib
+        import json
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        from app.models.payment import PaymentTransaction, WebhookEvent
+        from app.models.subscription import Subscription, UserMonthlyQuota
+        from app.services.payment_service import PaymentService
+
+        user_id = uuid.uuid4()
+        tx_id = uuid.uuid4()
+        order_id = f"order_race_{uuid.uuid4().hex[:12]}"
+        payment_id = f"pay_race_{uuid.uuid4().hex[:12]}"
+        event_id = f"evt_race_{uuid.uuid4().hex[:12]}"
+
+        db_init = pg_sessionmaker()
+        try:
+            test_user = User(
+                id=user_id,
+                role="citizen",
+                mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+                is_active=True,
+            )
+            db_init.add(test_user)
+
+            tx = PaymentTransaction(
+                id=tx_id,
+                user_id=user_id,
+                subscription_id=None,
+                razorpay_order_id=order_id,
+                razorpay_payment_id=None,
+                razorpay_signature=None,
+                amount=99.0,
+                currency="INR",
+                plan_type="premium",
+                billing_cycle="monthly",
+                payment_status="created",
+                payment_method=None,
+                idempotency_key=f"idemp_{order_id}",
+            )
+            db_init.add(tx)
+            db_init.commit()
+        finally:
+            db_init.close()
+
+        # Compute valid HMAC signature for verify_and_capture_payment
+        expected_payload = f"{order_id}|{payment_id}".encode("utf-8")
+        secret = settings.RAZORPAY_KEY_SECRET.encode("utf-8")
+        signature = hmac.new(secret, expected_payload, hashlib.sha256).hexdigest()
+
+        # Build webhook payload and compute valid HMAC signature for process_webhook
+        webhook_payload = {
+            "event": "payment.captured",
+            "event_id": event_id,
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": payment_id,
+                        "order_id": order_id,
+                        "status": "captured",
+                        "amount": 9900,
+                        "currency": "INR",
+                        "method": "upi",
+                    }
+                }
+            },
+        }
+        raw_webhook_body = json.dumps(webhook_payload).encode("utf-8")
+        wh_secret = settings.RAZORPAY_WEBHOOK_SECRET.encode("utf-8")
+        webhook_signature = hmac.new(wh_secret, raw_webhook_body, hashlib.sha256).hexdigest()
+
+        race_barrier = threading.Barrier(2)
+        results = {}
+
+        def run_verify():
+            db_v = pg_sessionmaker()
+            try:
+                race_barrier.wait(timeout=10.0)
+                res = PaymentService.verify_and_capture_payment(
+                    db=db_v,
+                    user_id=user_id,
+                    order_id=order_id,
+                    payment_id=payment_id,
+                    signature=signature,
+                    payment_method="upi",
+                )
+                results["verify"] = ("SUCCESS", res)
+            except Exception as e:
+                results["verify"] = ("ERROR", str(e))
+            finally:
+                db_v.close()
+
+        def run_webhook():
+            db_w = pg_sessionmaker()
+            try:
+                race_barrier.wait(timeout=10.0)
+                res = PaymentService.process_webhook(
+                    db=db_w,
+                    payload=webhook_payload,
+                    raw_body=raw_webhook_body,
+                    signature_header=webhook_signature,
+                )
+                results["webhook"] = ("SUCCESS", res)
+            except Exception as e:
+                results["webhook"] = ("ERROR", str(e))
+            finally:
+                db_w.close()
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f1 = executor.submit(run_verify)
+                f2 = executor.submit(run_webhook)
+                f1.result(timeout=15.0)
+                f2.result(timeout=15.0)
+
+            # Both threads must complete with SUCCESS status
+            assert results["verify"][0] == "SUCCESS", f"Verify failed: {results['verify']}"
+            assert results["webhook"][0] == "SUCCESS", f"Webhook failed: {results['webhook']}"
+
+            # Verify idempotency and final database state on live PostgreSQL
+            db_verify = pg_sessionmaker()
+            try:
+                # 1. Transaction status must be 'captured'
+                final_tx = db_verify.query(PaymentTransaction).filter(PaymentTransaction.id == tx_id).first()
+                assert final_tx is not None
+                assert final_tx.payment_status == "captured"
+                assert final_tx.razorpay_payment_id == payment_id
+                assert final_tx.subscription_id is not None
+
+                # 2. Exactly 1 active subscription must exist for the user
+                subs = db_verify.query(Subscription).filter(Subscription.user_id == user_id).all()
+                assert len(subs) == 1, f"Expected 1 subscription, found {len(subs)}"
+                assert subs[0].status == "active"
+                assert subs[0].plan_type == "premium"
+
+                # 3. Monthly quota status resolves to premium allocation (30 docs / 100 AI sessions)
+                from app.services.subscription_service import SubscriptionService
+                quota_status = SubscriptionService.get_quota_status(db_verify, user_id)
+                assert quota_status is not None
+                assert quota_status.ai_document_analyses_limit == settings.PREMIUM_MONTHLY_DOC_ANALYSES_LIMIT
+                assert quota_status.ai_guidance_sessions_limit == settings.PREMIUM_MONTHLY_AI_GUIDANCE_LIMIT
+                assert quota_status.can_analyze_document is True
+                assert quota_status.can_request_guidance is True
+            finally:
+                db_verify.close()
+
+        finally:
+            # Deterministic, safe cleanup of all test-created UUID records
+            db_cleanup = pg_sessionmaker()
+            try:
+                db_cleanup.query(WebhookEvent).filter(WebhookEvent.event_id == event_id).delete(synchronize_session=False)
+                db_cleanup.query(PaymentTransaction).filter(PaymentTransaction.id == tx_id).delete(synchronize_session=False)
+                db_cleanup.query(Subscription).filter(Subscription.user_id == user_id).delete(synchronize_session=False)
+                db_cleanup.query(UserMonthlyQuota).filter(UserMonthlyQuota.user_id == user_id).delete(synchronize_session=False)
+                db_cleanup.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+                db_cleanup.commit()
+            except Exception:
+                db_cleanup.rollback()
+            finally:
+                db_cleanup.close()
+
+    def test_live_postgres_transaction_rollback_safety(self, pg_sessionmaker):
+        """Verify PostgreSQL transaction rollback cleanly reverts partial uncommitted writes."""
+        db = pg_sessionmaker()
+        user_id = uuid.uuid4()
+        test_user = User(
+            id=user_id,
+            role="citizen",
+            mobile_number=f"99{uuid.uuid4().int % 100000000:08d}",
+            is_active=True,
+        )
+        db.add(test_user)
+        db.flush()
+
+        # User is visible in transaction
+        assert db.query(User).filter(User.id == user_id).first() is not None
+
+        # Rollback
+        db.rollback()
+
+        # User does not exist in DB
+        assert db.query(User).filter(User.id == user_id).first() is None
         db.close()
 

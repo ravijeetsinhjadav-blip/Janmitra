@@ -53,3 +53,36 @@ class CitizenSubscriptionResponse(BaseModel):
         "JanMitra Assist subscription provides application preparation and AI guidance. "
         "It does not submit government applications on your behalf."
     )
+
+
+class SubscriptionCancellationResponse(BaseModel):
+    """Response returned upon cancelling an active subscription."""
+    success: bool
+    message: str
+    subscription: CitizenSubscriptionResponse
+
+
+class SubscriptionHistoryItem(BaseModel):
+    """Record of a past or current subscription tier."""
+    id: UUID
+    plan_type: str
+    billing_cycle: Optional[str] = None
+    status: str
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    created_at: datetime
+
+
+class SubscriptionHistoryResponse(BaseModel):
+    """List of all historical subscriptions for citizen."""
+    total: int
+    items: List[SubscriptionHistoryItem]
+
+
+class FeatureAccessCheckResponse(BaseModel):
+    """Result of querying entitlement for a premium platform capability."""
+    feature: str
+    has_access: bool
+    plan_type: str
+    upgrade_required: bool
+    message: str

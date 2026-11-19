@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, model_validator
@@ -12,7 +13,7 @@ class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
     PORT: int = 8000
 
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080"
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
     LOG_LEVEL: str = "INFO"
 
     # PostgreSQL Database Settings
@@ -35,13 +36,27 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # OTP Authentication Settings (Phase 3)
-    OTP_LENGTH: int = 6
-    OTP_EXPIRE_SECONDS: int = 300  # 5 minutes
-    OTP_MAX_ATTEMPTS: int = 3
-    OTP_RESEND_COOLDOWN_SECONDS: int = 60
-    OTP_DEV_MODE: bool = True  # Returns development OTP for local testing
-    SMS_PROVIDER: str = "development"  # Options: 'development', 'production_sms'
+    # Initial Administrator Bootstrap (Optional, for one-time initialization)
+    INITIAL_ADMIN_EMAIL: Optional[str] = None
+    INITIAL_ADMIN_PASSWORD: Optional[str] = None
+
+    # SMTP Email & Password Recovery Settings (Phase 11)
+    SMTP_HOST: Optional[str] = "localhost"
+    SMTP_PORT: int = 1025
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: str = "noreply@janmitra.gov.in"
+    SMTP_FROM_NAME: str = "JanMitra Assist"
+    SMTP_USE_TLS: bool = False
+    SMTP_USE_SSL: bool = False
+    FRONTEND_BASE_URL: str = "http://localhost:8080"
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 15
+
+    # Rate Limiting & Brute Force Protection Settings (Phase 11)
+    LOGIN_RATE_LIMIT_MAX_ATTEMPTS: int = 5
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 300  # 5 minutes
+    PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS: int = 3
+    PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS: int = 900  # 15 minutes
 
     # User Account Deletion & Retention Settings (Phase 3)
     ACCOUNT_DELETION_RETENTION_DAYS: int = 30  # Configurable grace/statutory retention period
@@ -59,7 +74,7 @@ class Settings(BaseSettings):
     # AI Advisory & LLM Provider Settings (Phase 6)
     AI_PROVIDER: str = "gemini"  # Options: 'gemini', 'openai_compatible', 'mock'
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-4o-mini"
@@ -91,16 +106,66 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
 
     @model_validator(mode="after")
-    def validate_production_payment_configuration(self) -> "Settings":
+    def validate_production_configuration(self) -> "Settings":
         if self.ENVIRONMENT == "production":
+            # 1. Enforce strong non-default JWT secret
+            if (
+                not self.JWT_SECRET_KEY
+                or self.JWT_SECRET_KEY == "janmitra_insecure_default_dev_secret_change_in_production_32bytes"
+                or "change_me" in self.JWT_SECRET_KEY.lower()
+                or len(self.JWT_SECRET_KEY) < 32
+            ):
+                raise ValueError("CRITICAL SECURITY ERROR: Strong, non-default JWT_SECRET_KEY (>= 32 chars) required in production.")
+
+            # 2. Enforce exact production CORS origins (no localhost)
+            for origin in self.cors_origins:
+                if "localhost" in origin.lower() or "127.0.0.1" in origin:
+                    raise ValueError(f"CRITICAL SECURITY ERROR: Localhost origin '{origin}' is strictly prohibited in production ALLOWED_ORIGINS.")
+
+            # 3. Enforce valid Razorpay credentials
             if self.RAZORPAY_DEV_MODE:
                 raise ValueError("CRITICAL SECURITY ERROR: RAZORPAY_DEV_MODE cannot be enabled in production.")
-            if not self.RAZORPAY_KEY_ID or self.RAZORPAY_KEY_ID == "rzp_test_janmitra_dev_key":
+            if (
+                not self.RAZORPAY_KEY_ID
+                or self.RAZORPAY_KEY_ID == "rzp_test_janmitra_dev_key"
+                or "placeholder" in self.RAZORPAY_KEY_ID.lower()
+            ):
                 raise ValueError("CRITICAL SECURITY ERROR: Live RAZORPAY_KEY_ID required in production.")
-            if not self.RAZORPAY_KEY_SECRET or "dev_32char" in self.RAZORPAY_KEY_SECRET:
+            if (
+                not self.RAZORPAY_KEY_SECRET
+                or "dev_32char" in self.RAZORPAY_KEY_SECRET
+                or "placeholder" in self.RAZORPAY_KEY_SECRET.lower()
+            ):
                 raise ValueError("CRITICAL SECURITY ERROR: Live RAZORPAY_KEY_SECRET required in production.")
-            if not self.RAZORPAY_WEBHOOK_SECRET or "dev_32char" in self.RAZORPAY_WEBHOOK_SECRET:
+            if (
+                not self.RAZORPAY_WEBHOOK_SECRET
+                or "dev_32char" in self.RAZORPAY_WEBHOOK_SECRET
+                or "placeholder" in self.RAZORPAY_WEBHOOK_SECRET.lower()
+            ):
                 raise ValueError("CRITICAL SECURITY ERROR: Live RAZORPAY_WEBHOOK_SECRET required in production.")
+
+            # 4. Enforce PostgreSQL in production (no SQLite fallback permitted)
+            if self.sync_database_url.startswith("sqlite"):
+                raise ValueError("CRITICAL ARCHITECTURE ERROR: SQLite is strictly prohibited in production. PostgreSQL 16 is required.")
+
+            # 5. Enforce AI Provider credentials in production (no mock permitted)
+            if self.AI_PROVIDER.lower() == "mock":
+                raise ValueError("CRITICAL SECURITY ERROR: AI_PROVIDER='mock' is strictly prohibited in production. Live Gemini configuration required.")
+            if self.AI_PROVIDER.lower() == "gemini":
+                if (
+                    not self.GEMINI_API_KEY
+                    or "your_" in self.GEMINI_API_KEY.lower()
+                    or "placeholder" in self.GEMINI_API_KEY.lower()
+                    or len(self.GEMINI_API_KEY.strip()) < 10
+                ):
+                    raise ValueError("CRITICAL SECURITY ERROR: Valid GEMINI_API_KEY required in production when AI_PROVIDER='gemini'.")
+
+            # 6. Enforce OCR Provider credentials in production (no mock permitted)
+            if self.OCR_PROVIDER.lower() == "mock":
+                raise ValueError("CRITICAL SECURITY ERROR: OCR_PROVIDER='mock' is strictly prohibited in production. Google Cloud Vision configuration required.")
+            if self.OCR_PROVIDER.lower() == "google_cloud_vision":
+                if not self.GOOGLE_APPLICATION_CREDENTIALS or not os.path.exists(self.GOOGLE_APPLICATION_CREDENTIALS):
+                    raise ValueError("CRITICAL SECURITY ERROR: Valid GOOGLE_APPLICATION_CREDENTIALS file path required in production when OCR_PROVIDER='google_cloud_vision'.")
         return self
 
     @property
@@ -119,7 +184,7 @@ class Settings(BaseSettings):
         )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore"

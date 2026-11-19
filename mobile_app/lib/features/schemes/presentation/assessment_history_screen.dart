@@ -8,7 +8,8 @@ class AssessmentHistoryScreen extends StatefulWidget {
   const AssessmentHistoryScreen({super.key});
 
   @override
-  State<AssessmentHistoryScreen> createState() => _AssessmentHistoryScreenState();
+  State<AssessmentHistoryScreen> createState() =>
+      _AssessmentHistoryScreenState();
 }
 
 class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
@@ -162,10 +163,12 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
               side: BorderSide(color: color.withValues(alpha: 0.3)),
             ),
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               title: Text(
                 item.schemeName,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,7 +177,8 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -191,7 +195,8 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                       const SizedBox(width: 8),
                       Text(
                         'Criteria Match: ${item.criteriaMatchPercentage.toInt()}%',
-                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54),
                       ),
                     ],
                   ),
@@ -202,7 +207,8 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
                   ),
                 ],
               ),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black38),
+              trailing: const Icon(Icons.arrow_forward_ios,
+                  size: 16, color: Colors.black38),
               onTap: () => _viewDetail(item.assessmentId),
             ),
           );
@@ -211,4 +217,3 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
     );
   }
 }
-

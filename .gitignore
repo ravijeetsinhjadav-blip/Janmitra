@@ -64,3 +64,37 @@ backend/storage/*
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+
+# Firebase / Push Notification Credentials
+google-services.json
+**/google-services.json
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+*serviceAccount*.json
+**/serviceAccount*.json
+firebase-adminsdk*.json
+**/firebase-adminsdk*.json
+
+# PostgreSQL portable binaries and runtime data
+pgsql/
+pgsql_data/
+
+# SQLite databases & backups
+backend/*.db
+backend/*.db*
+*.db
+*.db*
+
+# Large Archives and export packages
+*.zip
+JanMitra_Assist_Final_Submission/
+installers/
+
+# Debug, screenshots, and UI inspection temporary artifacts
+*.png
+*.xml
+*.log
+mobile_app/logcat.txt
+scratch/
+

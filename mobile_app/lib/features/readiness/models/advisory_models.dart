@@ -41,7 +41,8 @@ class CitationModel {
       sourceTitle: json['source_title'] as String? ?? 'Scheme Guidelines',
       sourceReference: json['source_reference'] as String?,
       sourceUrl: json['source_url'] as String? ?? 'https://myscheme.gov.in/',
-      sourceFreshnessStatus: json['source_freshness_status'] as String? ?? 'Verified Official Source',
+      sourceFreshnessStatus: json['source_freshness_status'] as String? ??
+          'Verified Official Source',
       isDemoData: json['is_demo_data'] as bool? ?? true,
     );
   }
@@ -76,17 +77,36 @@ class ReadinessBreakdownModel {
 
   factory ReadinessBreakdownModel.fromJson(Map<String, dynamic> json) {
     return ReadinessBreakdownModel(
-      overallReadinessScore: (json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0,
-      criteriaMatchPercentage: (json['criteria_match_percentage'] as num?)?.toDouble() ?? 0.0,
-      documentCoveragePercentage: (json['document_coverage_percentage'] as num?)?.toDouble() ?? 0.0,
-      informationCompletenessPercentage: (json['information_completeness_percentage'] as num?)?.toDouble() ?? 0.0,
-      consistencyScore: (json['consistency_score'] as num?)?.toDouble() ?? 100.0,
+      overallReadinessScore:
+          (json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0,
+      criteriaMatchPercentage:
+          (json['criteria_match_percentage'] as num?)?.toDouble() ?? 0.0,
+      documentCoveragePercentage:
+          (json['document_coverage_percentage'] as num?)?.toDouble() ?? 0.0,
+      informationCompletenessPercentage:
+          (json['information_completeness_percentage'] as num?)?.toDouble() ??
+              0.0,
+      consistencyScore:
+          (json['consistency_score'] as num?)?.toDouble() ?? 100.0,
       consistencyStatus: json['consistency_status'] as String? ?? 'Consistent',
       scoreInterpretation: json['score_interpretation'] as String? ?? '',
-      uploadedDocumentTypes: (json['uploaded_document_types'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      missingDocumentTypes: (json['missing_document_types'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      discrepancies: (json['discrepancies'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      lowConfidenceDocuments: (json['low_confidence_documents'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      uploadedDocumentTypes: (json['uploaded_document_types'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      missingDocumentTypes: (json['missing_document_types'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      discrepancies: (json['discrepancies'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      lowConfidenceDocuments:
+          (json['low_confidence_documents'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [],
     );
   }
 }
@@ -123,12 +143,20 @@ class AIAdvisoryGuidanceModel {
       summary: json['summary'] as String? ?? '',
       assessmentExplanation: json['assessment_explanation'] as String? ?? '',
       criteriaAnalysis: (json['criteria_analysis'] as List<dynamic>?)
-              ?.map((e) => ConditionAnalysisModel.fromJson(e as Map<String, dynamic>))
+              ?.map((e) =>
+                  ConditionAnalysisModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
       documentAnalysis: json['document_analysis'] as String? ?? '',
-      potentialInconsistencies: (json['potential_inconsistencies'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      nextSteps: (json['next_steps'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      potentialInconsistencies:
+          (json['potential_inconsistencies'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [],
+      nextSteps: (json['next_steps'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
       officialPortalGuidance: json['official_portal_guidance'] as String? ?? '',
       citations: (json['citations'] as List<dynamic>?)
               ?.map((e) => CitationModel.fromJson(e as Map<String, dynamic>))
@@ -136,7 +164,8 @@ class AIAdvisoryGuidanceModel {
           [],
       language: json['language'] as String? ?? 'en',
       isMock: json['is_mock'] as bool? ?? false,
-      disclaimer: json['disclaimer'] as String? ?? 'Advisory Notice: This guidance is AI-assisted and does not replace official determinations.',
+      disclaimer: json['disclaimer'] as String? ??
+          'Advisory Notice: This guidance is AI-assisted and does not replace official determinations.',
     );
   }
 }
@@ -172,13 +201,19 @@ class AdvisoryAssessmentModel {
       schemeId: json['scheme_id'] as String? ?? '',
       schemeName: json['scheme_name'] as String? ?? 'Government Scheme',
       category: json['category'] as String? ?? 'General',
-      overallStatus: json['overall_status'] as String? ?? 'Insufficient Information',
-      readiness: ReadinessBreakdownModel.fromJson(json['readiness'] as Map<String, dynamic>? ?? {}),
-      advisory: AIAdvisoryGuidanceModel.fromJson(json['advisory'] as Map<String, dynamic>? ?? {}),
-      evaluatedAt: json['evaluated_at'] != null ? DateTime.parse(json['evaluated_at'] as String) : DateTime.now(),
-      officialSourceUrl: json['official_source_url'] as String? ?? 'https://myscheme.gov.in/',
-      officialApplicationUrl: json['official_application_url'] as String? ?? 'https://www.india.gov.in/',
+      overallStatus:
+          json['overall_status'] as String? ?? 'Insufficient Information',
+      readiness: ReadinessBreakdownModel.fromJson(
+          json['readiness'] as Map<String, dynamic>? ?? {}),
+      advisory: AIAdvisoryGuidanceModel.fromJson(
+          json['advisory'] as Map<String, dynamic>? ?? {}),
+      evaluatedAt: json['evaluated_at'] != null
+          ? DateTime.parse(json['evaluated_at'] as String)
+          : DateTime.now(),
+      officialSourceUrl:
+          json['official_source_url'] as String? ?? 'https://myscheme.gov.in/',
+      officialApplicationUrl: json['official_application_url'] as String? ??
+          'https://www.india.gov.in/',
     );
   }
 }
-

@@ -64,10 +64,29 @@ class GoogleCloudVisionAdapter(BaseOCRAdapter):
     def _get_client(self):
         if self._client is None:
             from google.cloud import vision
-            if self.credentials_path and os.path.exists(self.credentials_path):
-                self._client = vision.ImageAnnotatorClient.from_service_account_json(self.credentials_path)
+            from google.auth.exceptions import DefaultCredentialsError, GoogleAuthError
+
+            # Always refresh credentials_path from settings if not explicitly passed
+            creds = self.credentials_path or getattr(settings, "GOOGLE_APPLICATION_CREDENTIALS", None)
+            if creds:
+                if not os.path.exists(creds):
+                    raise FileNotFoundError(
+                        f"Google Cloud Vision credentials file not found at: {creds}"
+                    )
+                try:
+                    self._client = vision.ImageAnnotatorClient.from_service_account_json(creds)
+                except Exception as json_err:
+                    raise RuntimeError(
+                        f"Invalid Google Cloud Vision service account JSON credentials: {json_err}"
+                    ) from json_err
             else:
-                self._client = vision.ImageAnnotatorClient()
+                try:
+                    self._client = vision.ImageAnnotatorClient()
+                except (DefaultCredentialsError, GoogleAuthError, Exception) as auth_err:
+                    raise RuntimeError(
+                        "Google Cloud Vision credentials not configured: no valid service account file "
+                        "or Application Default Credentials found. Set GOOGLE_APPLICATION_CREDENTIALS."
+                    ) from auth_err
         return self._client
 
     def _extract_from_image(self, client, file_bytes: bytes, now: datetime) -> OCRResult:
@@ -149,10 +168,11 @@ class GoogleCloudVisionAdapter(BaseOCRAdapter):
             mime_type="application/pdf",
         )
         feature = vision.Feature(type_=vision.Feature.Type.DOCUMENT_TEXT_DETECTION)
+        # By leaving `pages` unspecified, the Vision API automatically annotates
+        # up to the first 5 pages of the document without failing on shorter PDFs.
         request = vision.AnnotateFileRequest(
             input_config=input_config,
             features=[feature],
-            pages=[1, 2, 3, 4, 5],
         )
 
         response = client.batch_annotate_files(requests=[request])
@@ -248,9 +268,45 @@ class GoogleCloudVisionAdapter(BaseOCRAdapter):
         filename: str,
     ) -> OCRResult:
         now = datetime.now(timezone.utc)
+
+        # 1. Input format & size validations
+        if not file_bytes or len(file_bytes) == 0:
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "empty_file"},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message="Uploaded document is empty (0 bytes).",
+                completed_at=now,
+            )
+
+        if len(file_bytes) > settings.MAX_DOCUMENT_FILE_SIZE_BYTES:
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "file_too_large"},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"Document exceeds maximum permitted file size of {settings.MAX_DOCUMENT_FILE_SIZE_BYTES} bytes.",
+                completed_at=now,
+            )
+
+        norm_mime = (mime_type or "").lower().strip()
+        if norm_mime not in ["application/pdf", "image/jpeg", "image/jpg", "image/png"]:
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "unsupported_format"},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"Unsupported document format '{mime_type}'. Supported formats: PDF, JPEG, PNG.",
+                completed_at=now,
+            )
+
         try:
             client = self._get_client()
-            if mime_type == "application/pdf":
+            if norm_mime == "application/pdf":
                 return self._extract_from_pdf(client, file_bytes, now)
             else:
                 return self._extract_from_image(client, file_bytes, now)
@@ -444,12 +500,12 @@ class OCRService:
         return env == "production" or not debug
 
     def _should_use_gcv(self) -> bool:
-        if settings.OCR_PROVIDER != "google_cloud_vision":
-            return False
-        creds_file = settings.GOOGLE_APPLICATION_CREDENTIALS
+        """Determine whether Google Cloud Vision should be used based on available credentials."""
+        creds_file = getattr(settings, "GOOGLE_APPLICATION_CREDENTIALS", None)
         if creds_file and os.path.exists(creds_file):
             return True
-        if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") and os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
+        env_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if env_creds and os.path.exists(env_creds):
             return True
         return False
 
@@ -460,26 +516,36 @@ class OCRService:
         document_type: str,
         filename: str,
     ) -> OCRResult:
-        """Process document through the configured OCR pipeline."""
-        now = datetime.now(timezone.utc)
+        """Process document through the configured OCR pipeline.
 
-        # 1. STRICT PRODUCTION SAFETY CHECK
+        Enforces strict provider routing:
+        - When in production:
+            Only Google Cloud Vision is permitted.
+            If credentials are not configured (not self._should_use_gcv()), immediately return OCR_FAILED
+            with an explicit message: 'OCR processing service unavailable in production: Cloud Vision credentials not configured.'
+            Otherwise invoke the Google Cloud Vision adapter.
+        - When in development/test:
+            If OCR_PROVIDER == 'google_cloud_vision': invoke Google Cloud Vision adapter directly (no fallback).
+            If OCR_PROVIDER == 'mock': invoke MockOCRAdapter.
+            Any other value: return OCR_FAILED with unsupported provider error.
+        """
+        now = datetime.now(timezone.utc)
+        provider = (getattr(settings, "OCR_PROVIDER", "mock") or "mock").lower()
+
+        # 1. Production Mode Constraints
         if self.is_production():
-            # In production, ONLY Google Cloud Vision is permitted.
-            # Mock OCR must NEVER execute or fall back silently.
             if not self._should_use_gcv():
-                logger.error("Production OCR error: Google Cloud Vision credentials not configured.")
+                logger.error("Production OCR error: Cloud Vision credentials not configured.")
                 return OCRResult(
                     extracted_text="",
                     confidence=0.0,
-                    metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "credentials_unconfigured"},
+                    metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "credentials_not_configured"},
                     status=DocumentProcessingStatus.OCR_FAILED,
                     manual_review_required=True,
-                    error_message="OCR processing service is unavailable in production: Cloud Vision credentials not configured.",
+                    error_message="OCR processing service unavailable in production: Cloud Vision credentials not configured.",
                     completed_at=now,
                 )
 
-            # In production, invoke GCV directly. If it fails, return OCR_FAILED without falling back to mock.
             logger.info("Processing document '%s' via Google Cloud Vision API in production", filename)
             return self._gcv_adapter.extract_text(
                 file_bytes=file_bytes,
@@ -488,34 +554,34 @@ class OCRService:
                 filename=filename,
             )
 
-        # 2. DEVELOPMENT / TEST ENVIRONMENT
-        if self._should_use_gcv():
-            logger.info("Processing document '%s' via Google Cloud Vision API", filename)
-            result = self._gcv_adapter.extract_text(
+        # 2. Development / Test Mode Routing
+        if provider == "google_cloud_vision":
+            logger.info("Processing document '%s' via Google Cloud Vision API (development mode)", filename)
+            # Direct invocation without silent mock fallback
+            return self._gcv_adapter.extract_text(
                 file_bytes=file_bytes,
                 mime_type=mime_type,
                 document_type=document_type,
                 filename=filename,
             )
-            # In development, fallback to mock if live API is temporarily unreachable or credentials invalid
-            if result.status == DocumentProcessingStatus.OCR_FAILED:
-                logger.warning("GCV failed in development; falling back to Mock OCR adapter with is_mock=True.")
-                mock_result = self._mock_adapter.extract_text(
-                    file_bytes=file_bytes,
-                    mime_type=mime_type,
-                    document_type=document_type,
-                    filename=filename,
-                )
-                mock_result.metadata["fallback_from_gcv_failure"] = True
-                return mock_result
-            return result
-        else:
+        elif provider == "mock":
             logger.info("Processing document '%s' via Mock OCR Adapter (development mode).", filename)
             return self._mock_adapter.extract_text(
                 file_bytes=file_bytes,
                 mime_type=mime_type,
                 document_type=document_type,
                 filename=filename,
+            )
+        else:
+            logger.error("Unknown OCR provider configured: %s", provider)
+            return OCRResult(
+                extracted_text="",
+                confidence=0.0,
+                metadata={"provider": provider, "is_mock": False, "error": "unknown_provider"},
+                status=DocumentProcessingStatus.OCR_FAILED,
+                manual_review_required=True,
+                error_message=f"Unknown OCR provider configured: '{provider}'. Supported: 'google_cloud_vision', 'mock'.",
+                completed_at=now,
             )
 
 

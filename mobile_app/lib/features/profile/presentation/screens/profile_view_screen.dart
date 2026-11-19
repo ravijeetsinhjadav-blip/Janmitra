@@ -116,7 +116,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        const Icon(Icons.error_outline,
+                            size: 48, color: Colors.red),
                         const SizedBox(height: 12),
                         Text(_errorMessage!, textAlign: TextAlign.center),
                         const SizedBox(height: 16),
@@ -133,15 +134,18 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.person_off_outlined, size: 48, color: Colors.grey),
+                          const Icon(Icons.person_off_outlined,
+                              size: 48, color: Colors.grey),
                           const SizedBox(height: 12),
                           const Text('No profile details found.'),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: () async {
-                              final created = await Navigator.of(context).push<bool>(
+                              final created =
+                                  await Navigator.of(context).push<bool>(
                                 MaterialPageRoute(
-                                  builder: (_) => const ProfileSetupScreen(isInitialSetup: false),
+                                  builder: (_) => const ProfileSetupScreen(
+                                      isInitialSetup: false),
                                 ),
                               );
                               if (created == true) _loadProfile();
@@ -164,7 +168,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 36,
-                                    backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                    backgroundColor: AppTheme.primaryBlue
+                                        .withValues(alpha: 0.1),
                                     child: const Icon(
                                       Icons.person,
                                       size: 42,
@@ -181,7 +186,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: Colors.blue.shade100,
                                       borderRadius: BorderRadius.circular(12),
@@ -234,7 +240,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                                   _buildInfoTile(
                                     icon: Icons.holiday_village_outlined,
                                     label: 'Residence Type',
-                                    value: _profile!.residenceType.toUpperCase(),
+                                    value:
+                                        _profile!.residenceType.toUpperCase(),
                                   ),
                                 ],
                               ),
@@ -267,12 +274,14 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                                   _buildInfoTile(
                                     icon: Icons.work_outline,
                                     label: 'Occupation',
-                                    value: _profile!.occupation ?? 'Not specified',
+                                    value:
+                                        _profile!.occupation ?? 'Not specified',
                                   ),
                                   _buildInfoTile(
                                     icon: Icons.school_outlined,
                                     label: 'Education Level',
-                                    value: _profile!.educationLevel ?? 'Not specified',
+                                    value: _profile!.educationLevel ??
+                                        'Not specified',
                                   ),
                                 ],
                               ),
@@ -280,7 +289,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen> {
                           ),
                           const SizedBox(height: 24),
                           OutlinedButton.icon(
-                            icon: const Icon(Icons.delete_forever, color: Colors.red),
+                            icon: const Icon(Icons.delete_forever,
+                                color: Colors.red),
                             label: const Text(
                               'Request Account Deletion',
                               style: TextStyle(color: Colors.red),

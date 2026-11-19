@@ -58,7 +58,8 @@ class DocumentMetadataModel {
       mimeType: json['mime_type'] as String? ?? 'application/octet-stream',
       fileSize: (json['file_size'] as num?)?.toInt() ?? 0,
       uploadStatus: json['upload_status'] as String? ?? 'uploaded',
-      ocrStatus: json['ocr_status'] as String? ?? DocumentProcessingStatus.uploaded,
+      ocrStatus:
+          json['ocr_status'] as String? ?? DocumentProcessingStatus.uploaded,
       ocrConfidence: (json['ocr_confidence'] as num?)?.toDouble(),
       ocrExtractedText: json['ocr_extracted_text'] as String?,
       ocrMetadata: json['ocr_metadata'] is Map<String, dynamic>
@@ -123,14 +124,23 @@ class DocumentMetadataModel {
       case 'bank_passbook':
         return 'Bank Passbook / Statement';
       default:
-        return documentType.replaceAll('_', ' ').split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
+        return documentType
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map((w) =>
+                w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+            .join(' ');
     }
   }
 
   // Formatted file size string
   String get formattedFileSize {
-    if (fileSize < 1024) return '$fileSize B';
-    if (fileSize < 1024 * 1024) return '${(fileSize / 1024).toStringAsFixed(1)} KB';
+    if (fileSize < 1024) {
+      return '$fileSize B';
+    }
+    if (fileSize < 1024 * 1024) {
+      return '${(fileSize / 1024).toStringAsFixed(1)} KB';
+    }
     return '${(fileSize / (1024 * 1024)).toStringAsFixed(2)} MB';
   }
 
@@ -141,10 +151,12 @@ class DocumentMetadataModel {
 
   // Status color
   Color get statusColor {
-    if (ocrStatus == DocumentProcessingStatus.ocrCompleted && !manualReviewRequired) {
+    if (ocrStatus == DocumentProcessingStatus.ocrCompleted &&
+        !manualReviewRequired) {
       return Colors.green.shade700;
     }
-    if (manualReviewRequired || ocrStatus == DocumentProcessingStatus.manualReviewRequired) {
+    if (manualReviewRequired ||
+        ocrStatus == DocumentProcessingStatus.manualReviewRequired) {
       return Colors.orange.shade800;
     }
     if (ocrStatus == DocumentProcessingStatus.ocrFailed) {
@@ -158,10 +170,12 @@ class DocumentMetadataModel {
 
   // Status badge label
   String get statusBadgeText {
-    if (ocrStatus == DocumentProcessingStatus.ocrCompleted && !manualReviewRequired) {
+    if (ocrStatus == DocumentProcessingStatus.ocrCompleted &&
+        !manualReviewRequired) {
       return 'OCR Completed';
     }
-    if (manualReviewRequired || ocrStatus == DocumentProcessingStatus.manualReviewRequired) {
+    if (manualReviewRequired ||
+        ocrStatus == DocumentProcessingStatus.manualReviewRequired) {
       return 'Review Needed';
     }
 
@@ -242,10 +256,10 @@ class SchemeDocumentChecklistModel {
       totalUploaded: (json['total_uploaded'] as num?)?.toInt() ?? 0,
       isFullyPrepared: json['is_fully_prepared'] as bool? ?? false,
       checklist: rawChecklist
-          .map((item) => SchemeDocumentChecklistItemModel.fromJson(item as Map<String, dynamic>))
+          .map((item) => SchemeDocumentChecklistItemModel.fromJson(
+              item as Map<String, dynamic>))
           .toList(),
       disclaimer: json['disclaimer'] as String? ?? '',
     );
   }
 }
-

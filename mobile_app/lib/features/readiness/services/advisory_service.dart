@@ -46,7 +46,8 @@ class AdvisoryService {
   }
 
   /// Retrieve existing AI advisory and readiness report by assessment ID
-  Future<AdvisoryAssessmentModel> getAssessmentAdvisory(String assessmentId) async {
+  Future<AdvisoryAssessmentModel> getAssessmentAdvisory(
+      String assessmentId) async {
     final uri = Uri.parse(
       '${ApiEndpoints.baseUrl}${ApiEndpoints.assessmentAdvisory(assessmentId)}',
     );
@@ -85,4 +86,3 @@ class AdvisoryService {
     }
   }
 }
-

@@ -6,15 +6,28 @@ from app.models.scheme import Scheme
 from app.schemas.application import ApplicationResponse
 
 
-def get_auth_headers(client, mobile_number: str) -> dict:
-    """Authenticate citizen via mock OTP and return Bearer headers."""
-    res_otp = client.post("/api/v1/auth/send-otp", json={"mobile_number": mobile_number})
-    otp = res_otp.json()["dev_otp"]
-    res_verify = client.post(
-        "/api/v1/auth/verify-otp",
-        json={"mobile_number": mobile_number, "otp": otp},
+def get_auth_headers(client, mobile_number: str = "+919876543210") -> dict:
+    """Authenticate citizen via Email+Password and return Bearer headers."""
+    clean_id = "".join(c for c in mobile_number if c.isalnum()) or "default"
+    email = f"user_{clean_id}@example.com"
+    res_reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "Password@12345",
+            "confirm_password": "Password@12345",
+            "full_name": "Test Citizen",
+            "mobile_number": mobile_number,
+        },
     )
-    token = res_verify.json()["access_token"]
+    if res_reg.status_code == 201:
+        token = res_reg.json()["access_token"]
+    else:
+        res_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "Password@12345"},
+        )
+        token = res_login.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -1170,3 +1183,549 @@ class TestApplicationTrackingModule:
         res_detail = client.get(f"/api/v1/applications/{citizen_app_id}", headers=admin_headers)
         assert res_detail.status_code == 404
         assert res_detail.json()["detail"] == "Application tracking record not found."
+
+    # -------------------------------------------------------------------------
+    # Subphase 8.2: Status History, Remarks & Reminders Tests
+    # -------------------------------------------------------------------------
+
+    def test_create_application_creates_initial_status_history(self, client):
+        """Registering an application atomically creates the initial 'Submitted' history record."""
+        headers = get_auth_headers(client, "+919944000001")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "HIST-INIT-001",
+            },
+        )
+        assert res_create.status_code == 201
+        app_id = res_create.json()["id"]
+
+        # Fetch history
+        res_hist = client.get(f"/api/v1/applications/{app_id}/history", headers=headers)
+        assert res_hist.status_code == 200
+        data = res_hist.json()
+        assert data["application_id"] == app_id
+        assert data["current_status"] == "Submitted"
+        assert data["total"] == 1
+        assert "disclaimer" in data
+        assert "do not represent official government determinations" in data["disclaimer"]
+
+        first_entry = data["history"][0]
+        assert first_entry["previous_status"] is None
+        assert first_entry["new_status"] == "Submitted"
+        assert first_entry["event_type"] == "INITIAL_REGISTRATION"
+        assert first_entry["source"] == "USER_REPORTED"
+        assert first_entry["remarks"] is None
+
+    def test_create_application_with_initial_remarks(self, client):
+        """Registering an application with initial remarks records them in the initial history event."""
+        headers = get_auth_headers(client, "+919944000002")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "HIST-REMARKS-001",
+                "remarks": "Applied via CSC Center with physical acknowledgement slip",
+            },
+        )
+        assert res_create.status_code == 201
+        app_id = res_create.json()["id"]
+
+        res_hist = client.get(f"/api/v1/applications/{app_id}/history", headers=headers)
+        assert res_hist.status_code == 200
+        history = res_hist.json()["history"]
+        assert len(history) == 1
+        assert history[0]["remarks"] == "Applied via CSC Center with physical acknowledgement slip"
+
+    def test_patch_status_appends_status_update_history(self, client):
+        """Updating status via PATCH appends a chronological STATUS_UPDATE history record."""
+        headers = get_auth_headers(client, "+919944000003")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "STATUS-HIST-001",
+            },
+        )
+        app_id = res_create.json()["id"]
+
+        # Transition to Under Review with remarks
+        res_patch = client.patch(
+            f"/api/v1/applications/{app_id}",
+            headers=headers,
+            json={
+                "status": "Under Review",
+                "remarks": "Nodal officer acknowledged receipt; under preliminary examination",
+            },
+        )
+        assert res_patch.status_code == 200
+        assert res_patch.json()["status"] == "Under Review"
+
+        # Fetch history
+        res_hist = client.get(f"/api/v1/applications/{app_id}/history", headers=headers)
+        assert res_hist.status_code == 200
+        data = res_hist.json()
+        assert data["total"] == 2
+        assert data["current_status"] == "Under Review"
+
+        entry2 = data["history"][1]
+        assert entry2["previous_status"] == "Submitted"
+        assert entry2["new_status"] == "Under Review"
+        assert entry2["event_type"] == "STATUS_UPDATE"
+        assert entry2["source"] == "USER_REPORTED"
+        assert entry2["remarks"] == "Nodal officer acknowledged receipt; under preliminary examination"
+
+    def test_patch_remarks_only_appends_remark_added_event(self, client):
+        """PATCH with remarks only creates a REMARK_ADDED event without falsely claiming a status transition."""
+        headers = get_auth_headers(client, "+919944000004")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "REMARK-ONLY-001",
+            },
+        )
+        app_id = res_create.json()["id"]
+
+        # Submit remarks-only update
+        res_patch = client.patch(
+            f"/api/v1/applications/{app_id}",
+            headers=headers,
+            json={"remarks": "Telephoned helpdesk for status update"},
+        )
+        assert res_patch.status_code == 200
+        assert res_patch.json()["status"] == "Submitted"
+
+        # Verify history
+        res_hist = client.get(f"/api/v1/applications/{app_id}/history", headers=headers)
+        data = res_hist.json()
+        assert data["total"] == 2
+        entry = data["history"][1]
+        assert entry["event_type"] == "REMARK_ADDED"
+        assert entry["previous_status"] == "Submitted"
+        assert entry["new_status"] == "Submitted"
+        assert entry["remarks"] == "Telephoned helpdesk for status update"
+        assert entry["source"] == "USER_REPORTED"
+
+    def test_patch_details_only_appends_details_updated_event(self, client):
+        """Updating application reference number or submission date logs an APPLICATION_DETAILS_UPDATED event."""
+        headers = get_auth_headers(client, "+919944000005")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "OLD-REF-123",
+            },
+        )
+        app_id = res_create.json()["id"]
+
+        # Update reference number without status change
+        res_patch = client.patch(
+            f"/api/v1/applications/{app_id}",
+            headers=headers,
+            json={"application_reference_number": "NEW-REF-456"},
+        )
+        assert res_patch.status_code == 200
+
+        res_hist = client.get(f"/api/v1/applications/{app_id}/history", headers=headers)
+        data = res_hist.json()
+        assert data["total"] == 2
+        entry = data["history"][1]
+        assert entry["event_type"] == "APPLICATION_DETAILS_UPDATED"
+        assert entry["previous_status"] == "Submitted"
+        assert entry["new_status"] == "Submitted"
+        assert entry["remarks"] is None
+
+    def test_patch_unchanged_status_without_remarks_prevents_duplicate_history(self, client):
+        """Sending an identical status without remarks does not append a duplicate history entry."""
+        headers = get_auth_headers(client, "+919944000006")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "NO-DUP-001",
+            },
+        )
+        app_id = res_create.json()["id"]
+
+        # Resend status="Submitted" with no remarks or changes
+        res_patch = client.patch(
+            f"/api/v1/applications/{app_id}",
+            headers=headers,
+            json={"status": "Submitted"},
+        )
+        assert res_patch.status_code == 200
+
+        res_hist = client.get(f"/api/v1/applications/{app_id}/history", headers=headers)
+        assert res_hist.json()["total"] == 1  # Unchanged status created no duplicate
+
+    def test_get_application_history_cross_user_idor_404(self, client):
+        """Querying status history of another citizen's application returns HTTP 404."""
+        headers_user1 = get_auth_headers(client, "+919944000007")
+        headers_user2 = get_auth_headers(client, "+919944000008")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_create = client.post(
+            "/api/v1/applications",
+            headers=headers_user1,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "USER1-HIST-APP",
+            },
+        )
+        app_id = res_create.json()["id"]
+
+        # User 2 attempts to query User 1's history
+        res_get = client.get(f"/api/v1/applications/{app_id}/history", headers=headers_user2)
+        assert res_get.status_code == 404
+        assert res_get.json()["detail"] == "Application tracking record not found."
+
+    def test_reminder_crud_lifecycle(self, client):
+        """Full reminder CRUD lifecycle: Create, List, Detail, Update, and Delete."""
+        headers = get_auth_headers(client, "+919944000009")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_app = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "REM-CRUD-APP",
+            },
+        )
+        app_id = res_app.json()["id"]
+
+        # 1. Create reminder
+        rem_date = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        res_create = client.post(
+            f"/api/v1/applications/{app_id}/reminders",
+            headers=headers,
+            json={
+                "title": "Submit physical documents at Tehsil office",
+                "description": "Carry original 7/12 extract and Aadhaar card",
+                "reminder_date": rem_date,
+            },
+        )
+        assert res_create.status_code == 201
+        rem_data = res_create.json()
+        rem_id = rem_data["id"]
+        assert rem_data["title"] == "Submit physical documents at Tehsil office"
+        assert rem_data["is_completed"] is False
+        assert rem_data["completed_at"] is None
+
+        # 2. List reminders for application
+        res_list = client.get(f"/api/v1/applications/{app_id}/reminders", headers=headers)
+        assert res_list.status_code == 200
+        assert res_list.json()["total"] == 1
+
+        # 3. Get reminder detail
+        res_detail = client.get(f"/api/v1/applications/{app_id}/reminders/{rem_id}", headers=headers)
+        assert res_detail.status_code == 200
+        assert res_detail.json()["id"] == rem_id
+
+        # 4. Update reminder title
+        res_patch = client.patch(
+            f"/api/v1/applications/{app_id}/reminders/{rem_id}",
+            headers=headers,
+            json={"title": "Submit verification docs at District office"},
+        )
+        assert res_patch.status_code == 200
+        assert res_patch.json()["title"] == "Submit verification docs at District office"
+
+        # 5. Delete reminder
+        res_del = client.delete(f"/api/v1/applications/{app_id}/reminders/{rem_id}", headers=headers)
+        assert res_del.status_code == 200
+        assert "Reminder deleted successfully" in res_del.json()["message"]
+
+        # 6. Verify deleted
+        res_after = client.get(f"/api/v1/applications/{app_id}/reminders/{rem_id}", headers=headers)
+        assert res_after.status_code == 404
+
+    def test_reminder_completion_and_reopening(self, client):
+        """Marking a reminder complete automatically populates completed_at; reopening clears it."""
+        headers = get_auth_headers(client, "+919944000010")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_app = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={
+                "scheme_id": scheme_id,
+                "submission_date": sub_date,
+                "application_reference_number": "REM-COMPLETE-APP",
+            },
+        )
+        app_id = res_app.json()["id"]
+
+        rem_date = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        res_create = client.post(
+            f"/api/v1/applications/{app_id}/reminders",
+            headers=headers,
+            json={"title": "Attend biometrics appointment", "reminder_date": rem_date},
+        )
+        rem_id = res_create.json()["id"]
+
+        # Complete reminder
+        res_done = client.patch(
+            f"/api/v1/applications/{app_id}/reminders/{rem_id}",
+            headers=headers,
+            json={"is_completed": True},
+        )
+        assert res_done.status_code == 200
+        assert res_done.json()["is_completed"] is True
+        assert res_done.json()["completed_at"] is not None
+
+        # Reopen reminder
+        res_reopen = client.patch(
+            f"/api/v1/applications/{app_id}/reminders/{rem_id}",
+            headers=headers,
+            json={"is_completed": False},
+        )
+        assert res_reopen.status_code == 200
+        assert res_reopen.json()["is_completed"] is False
+        assert res_reopen.json()["completed_at"] is None
+
+    def test_reminder_upcoming_global_endpoint(self, client):
+        """GET /api/v1/applications/reminders/upcoming returns active uncompleted reminders across all applications."""
+        headers = get_auth_headers(client, "+919944000011")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        # Create two applications
+        res_app1 = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={"scheme_id": scheme_id, "submission_date": sub_date, "application_reference_number": "UP-APP-1"},
+        )
+        app1_id = res_app1.json()["id"]
+
+        res_app2 = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={"scheme_id": scheme_id, "submission_date": sub_date, "application_reference_number": "UP-APP-2"},
+        )
+        app2_id = res_app2.json()["id"]
+
+        # Add active reminder to App 1
+        d1 = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        client.post(
+            f"/api/v1/applications/{app1_id}/reminders",
+            headers=headers,
+            json={"title": "App 1 task", "reminder_date": d1},
+        )
+
+        # Add completed reminder to App 1
+        d2 = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        res_rem_comp = client.post(
+            f"/api/v1/applications/{app1_id}/reminders",
+            headers=headers,
+            json={"title": "Already done task", "reminder_date": d2},
+        )
+        comp_id = res_rem_comp.json()["id"]
+        client.patch(
+            f"/api/v1/applications/{app1_id}/reminders/{comp_id}",
+            headers=headers,
+            json={"is_completed": True},
+        )
+
+        # Add active reminder to App 2
+        d3 = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        client.post(
+            f"/api/v1/applications/{app2_id}/reminders",
+            headers=headers,
+            json={"title": "App 2 task", "reminder_date": d3},
+        )
+
+        # Fetch upcoming
+        res_up = client.get("/api/v1/applications/reminders/upcoming", headers=headers)
+        assert res_up.status_code == 200
+        up_data = res_up.json()
+        assert up_data["total"] == 2
+        titles = [r["title"] for r in up_data["reminders"]]
+        assert "App 1 task" in titles
+        assert "App 2 task" in titles
+        assert "Already done task" not in titles  # Completed task excluded
+
+    def test_reminder_naive_datetime_fails_422(self, client):
+        """Reminder date without timezone offset is rejected with HTTP 422."""
+        headers = get_auth_headers(client, "+919944000012")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_app = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={"scheme_id": scheme_id, "submission_date": sub_date, "application_reference_number": "REM-TZ-APP"},
+        )
+        app_id = res_app.json()["id"]
+
+        # Naive datetime
+        res_naive = client.post(
+            f"/api/v1/applications/{app_id}/reminders",
+            headers=headers,
+            json={"title": "Naive date test", "reminder_date": "2026-11-10T10:00:00"},
+        )
+        assert res_naive.status_code == 422
+        assert "timezone offset" in res_naive.text
+
+    def test_reminder_empty_patch_fails_422(self, client):
+        """Empty PATCH body {} for reminders is rejected with HTTP 422."""
+        headers = get_auth_headers(client, "+919944000013")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_app = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={"scheme_id": scheme_id, "submission_date": sub_date, "application_reference_number": "REM-EMPTY-APP"},
+        )
+        app_id = res_app.json()["id"]
+
+        rem_date = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+        res_create = client.post(
+            f"/api/v1/applications/{app_id}/reminders",
+            headers=headers,
+            json={"title": "To empty patch", "reminder_date": rem_date},
+        )
+        rem_id = res_create.json()["id"]
+
+        res_patch = client.patch(
+            f"/api/v1/applications/{app_id}/reminders/{rem_id}",
+            headers=headers,
+            json={},
+        )
+        assert res_patch.status_code == 422
+
+    def test_reminder_cross_user_idor_404(self, client):
+        """Cross-user reminder creation, retrieval, update, and deletion return HTTP 404."""
+        headers_user1 = get_auth_headers(client, "+919944000014")
+        headers_user2 = get_auth_headers(client, "+919944000015")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_app = client.post(
+            "/api/v1/applications",
+            headers=headers_user1,
+            json={"scheme_id": scheme_id, "submission_date": sub_date, "application_reference_number": "USER1-REM-APP"},
+        )
+        app_id = res_app.json()["id"]
+
+        rem_date = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+        res_rem = client.post(
+            f"/api/v1/applications/{app_id}/reminders",
+            headers=headers_user1,
+            json={"title": "User 1 reminder", "reminder_date": rem_date},
+        )
+        rem_id = res_rem.json()["id"]
+
+        # User 2 attempts to view User 1's reminder -> 404
+        assert client.get(f"/api/v1/applications/{app_id}/reminders/{rem_id}", headers=headers_user2).status_code == 404
+        # User 2 attempts to update User 1's reminder -> 404
+        assert client.patch(f"/api/v1/applications/{app_id}/reminders/{rem_id}", headers=headers_user2, json={"title": "Hacked"}).status_code == 404
+        # User 2 attempts to delete User 1's reminder -> 404
+        assert client.delete(f"/api/v1/applications/{app_id}/reminders/{rem_id}", headers=headers_user2).status_code == 404
+        # User 2 attempts to create a reminder under User 1's application -> 404
+        assert client.post(f"/api/v1/applications/{app_id}/reminders", headers=headers_user2, json={"title": "Injected", "reminder_date": rem_date}).status_code == 404
+
+    def test_delete_application_cascades_history_and_reminders(self, client, db_session):
+        """Deleting an application tracking record cascades to delete child status history and reminders."""
+        from app.models.application import ApplicationStatusHistory, ApplicationReminder
+
+        headers = get_auth_headers(client, "+919944000016")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        res_app = client.post(
+            "/api/v1/applications",
+            headers=headers,
+            json={"scheme_id": scheme_id, "submission_date": sub_date, "application_reference_number": "CASCADE-APP-001"},
+        )
+        app_id = uuid.UUID(res_app.json()["id"])
+
+        # Add a reminder
+        rem_date = (datetime.now(timezone.utc) + timedelta(days=4)).isoformat()
+        client.post(
+            f"/api/v1/applications/{app_id}/reminders",
+            headers=headers,
+            json={"title": "To be cascaded", "reminder_date": rem_date},
+        )
+
+        # Confirm child rows exist in DB
+        assert db_session.query(ApplicationStatusHistory).filter(ApplicationStatusHistory.application_id == app_id).count() >= 1
+        assert db_session.query(ApplicationReminder).filter(ApplicationReminder.application_id == app_id).count() == 1
+
+        # Delete application
+        res_del = client.delete(f"/api/v1/applications/{app_id}", headers=headers)
+        assert res_del.status_code == 200
+
+        # Confirm children were deleted via cascade
+        assert db_session.query(ApplicationStatusHistory).filter(ApplicationStatusHistory.application_id == app_id).count() == 0
+        assert db_session.query(ApplicationReminder).filter(ApplicationReminder.application_id == app_id).count() == 0
+
+    def test_transaction_rollback_when_history_fails(self, client, db_session, monkeypatch):
+        """If history insertion fails during application creation, the entire transaction rolls back."""
+        from app.models.application import ApplicationStatusHistory
+        headers = get_auth_headers(client, "+919944000017")
+        scheme_id = get_active_scheme_id(client)
+        sub_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+        # Monkeypatch db.add when called on ApplicationStatusHistory to trigger an error
+        original_add = db_session.add
+
+        def failing_add(instance):
+            if isinstance(instance, ApplicationStatusHistory):
+                raise RuntimeError("Simulated status history insertion failure!")
+            return original_add(instance)
+
+        monkeypatch.setattr(db_session, "add", failing_add)
+
+        with pytest.raises(RuntimeError, match="Simulated status history insertion failure!"):
+            client.post(
+                "/api/v1/applications",
+                headers=headers,
+                json={
+                    "scheme_id": scheme_id,
+                    "submission_date": sub_date,
+                    "application_reference_number": "ROLLBACK-FAIL-APP",
+                },
+            )
+
+        # Verify application record was NOT persisted in database
+        from app.models.application import Application
+        assert db_session.query(Application).filter(Application.application_reference_number == "ROLLBACK-FAIL-APP").first() is None

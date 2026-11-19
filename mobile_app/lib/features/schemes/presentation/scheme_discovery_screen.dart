@@ -70,7 +70,9 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
 
     try {
       final res = await _schemeService.getSchemes(
-        query: _searchController.text.trim().isNotEmpty ? _searchController.text.trim() : null,
+        query: _searchController.text.trim().isNotEmpty
+            ? _searchController.text.trim()
+            : null,
         category: _selectedCategory != 'All' ? _selectedCategory : null,
         state: _selectedState != 'All' ? _selectedState : null,
         page: page,
@@ -124,7 +126,8 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
             tooltip: 'Recommended Schemes',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RecommendedSchemesScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const RecommendedSchemesScreen()),
               );
             },
           ),
@@ -133,7 +136,8 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
             tooltip: 'My Assessments',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const AssessmentHistoryScreen()),
               );
             },
           ),
@@ -170,9 +174,12 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.location_on_outlined, size: 18, color: Colors.black54),
+                    const Icon(Icons.location_on_outlined,
+                        size: 18, color: Colors.black54),
                     const SizedBox(width: 6),
-                    const Text('State Scope:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Text('State Scope:',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
@@ -187,7 +194,10 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
                             value: _selectedState,
                             isDense: true,
                             items: _states
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13))))
+                                .map((s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(s,
+                                        style: const TextStyle(fontSize: 13))))
                                 .toList(),
                             onChanged: _onStateChanged,
                           ),
@@ -208,7 +218,8 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _buildCategoryChip('All'),
-                ..._categories.map((c) => _buildCategoryChip(c.category, count: c.count)),
+                ..._categories
+                    .map((c) => _buildCategoryChip(c.category, count: c.count)),
               ],
             ),
           ),
@@ -342,7 +353,8 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
@@ -356,23 +368,6 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
                       ),
                     ),
                   ),
-                  if (scheme.isDemoData)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.amber.shade300),
-                      ),
-                      child: Text(
-                        'DEMO',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade900,
-                        ),
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -401,7 +396,8 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
                       const SizedBox(width: 4),
                       Text(
                         scheme.stateApplicability,
-                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54),
                       ),
                     ],
                   ),
@@ -415,7 +411,8 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
                           color: AppTheme.primaryBlue,
                         ),
                       ),
-                      Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.primaryBlue),
+                      Icon(Icons.arrow_forward_ios,
+                          size: 12, color: AppTheme.primaryBlue),
                     ],
                   ),
                 ],
@@ -435,16 +432,19 @@ class _SchemeDiscoveryScreenState extends State<SchemeDiscoveryScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: _currentPage > 1 ? () => _fetchSchemes(page: _currentPage - 1) : null,
+            onPressed: _currentPage > 1
+                ? () => _fetchSchemes(page: _currentPage - 1)
+                : null,
           ),
           Text('Page $_currentPage of $_totalPages'),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: _currentPage < _totalPages ? () => _fetchSchemes(page: _currentPage + 1) : null,
+            onPressed: _currentPage < _totalPages
+                ? () => _fetchSchemes(page: _currentPage + 1)
+                : null,
           ),
         ],
       ),
     );
   }
 }
-

@@ -64,4 +64,3 @@ class WelcomeCard extends StatelessWidget {
     );
   }
 }
-

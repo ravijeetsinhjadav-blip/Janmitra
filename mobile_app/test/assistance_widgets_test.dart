@@ -80,18 +80,22 @@ void main() {
             {
               'step_number': 1,
               'title': 'Visit Official Portal',
-              'instruction': 'Navigate to pmkisan.gov.in and click New Farmer Registration.',
+              'instruction':
+                  'Navigate to pmkisan.gov.in and click New Farmer Registration.',
             }
           ],
           'language': 'en',
-          'disclaimer': 'AI-assisted guidance does not guarantee application approval.',
+          'disclaimer':
+              'AI-assisted guidance does not guarantee application approval.',
         },
-        'official_application_url': 'https://pmkisan.gov.in/RegistrationFormNew.aspx',
+        'official_application_url':
+            'https://pmkisan.gov.in/RegistrationFormNew.aspx',
         'official_source_url': 'https://pmkisan.gov.in/',
         'is_demo_data': true,
         'language': 'en',
         'evaluated_at': '2026-10-31T12:00:00Z',
-        'disclaimer': 'JanMitra Assist is an application preparation assistant. It does NOT submit your application.',
+        'disclaimer':
+            'JanMitra Assist is an application preparation assistant. It does NOT submit your application.',
       };
 
       final model = ApplicationAssistanceModel.fromJson(json);
@@ -102,7 +106,8 @@ void main() {
       expect(model.criteriaMatchPercentage, 100.0);
       expect(model.overallReadinessScore, 85.0);
       expect(model.documentPreparationStatuses.length, 2);
-      expect(model.documentPreparationStatuses[0].status, 'Ready for Application Preparation');
+      expect(model.documentPreparationStatuses[0].status,
+          'Ready for Application Preparation');
       expect(model.documentPreparationStatuses[1].status, 'Missing');
       expect(model.checklist.length, 2);
       expect(model.checklist[0].isCompleted, isTrue);
@@ -124,7 +129,8 @@ void main() {
         'completed_count': 3,
         'total_count': 4,
         'completion_percentage': 75.0,
-        'message': 'Checklist progress updated. This preparation checklist does NOT submit your application to the government.',
+        'message':
+            'Checklist progress updated. This preparation checklist does NOT submit your application to the government.',
       };
 
       final res = ChecklistUpdateResponseModel.fromJson(json);
@@ -213,22 +219,27 @@ void main() {
             PortalStepInstructionModel(
               stepNumber: 1,
               title: 'Access Official Portal',
-              instruction: 'Visit https://pmkisan.gov.in/ and select New Farmer Registration.',
+              instruction:
+                  'Visit https://pmkisan.gov.in/ and select New Farmer Registration.',
             ),
           ],
           language: 'en',
           disclaimer: 'Guidance does not guarantee official approval.',
         ),
-        officialApplicationUrl: 'https://pmkisan.gov.in/RegistrationFormNew.aspx',
+        officialApplicationUrl:
+            'https://pmkisan.gov.in/RegistrationFormNew.aspx',
         officialSourceUrl: 'https://pmkisan.gov.in/',
         isDemoData: true,
         language: 'en',
         evaluatedAt: DateTime.parse('2026-10-31T12:00:00Z'),
-        disclaimer: 'JanMitra Assist is an application preparation assistant. It does NOT submit your application to the government.',
+        disclaimer:
+            'JanMitra Assist is an application preparation assistant. It does NOT submit your application to the government.',
       );
     });
 
-    testWidgets('renders statutory non-submission disclaimer and scheme headers', (tester) async {
+    testWidgets(
+        'renders statutory non-submission disclaimer and scheme headers',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -247,10 +258,14 @@ void main() {
 
       // Statutory Banner
       expect(find.text('Preparation Assistant Notice'), findsOneWidget);
-      expect(find.textContaining('does NOT submit your application to the government'), findsAtLeastNWidgets(1));
+      expect(
+          find.textContaining(
+              'does NOT submit your application to the government'),
+          findsAtLeastNWidgets(1));
 
       // Scheme Header & Badges
-      expect(find.text('Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)'), findsOneWidget);
+      expect(find.text('Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)'),
+          findsOneWidget);
       expect(find.text('DEMO DATA'), findsOneWidget);
       expect(find.textContaining('Ministry of Agriculture'), findsOneWidget);
 
@@ -260,7 +275,8 @@ void main() {
       expect(find.text('ગુજરાતી'), findsOneWidget);
     });
 
-    testWidgets('renders interactive checklist and updates checkbox state', (tester) async {
+    testWidgets('renders interactive checklist and updates checkbox state',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -287,12 +303,15 @@ void main() {
       expect(find.byType(CheckboxListTile), findsNWidgets(2));
 
       // Checkbox state test
-      final checkboxTiles = tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile)).toList();
+      final checkboxTiles = tester
+          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+          .toList();
       expect(checkboxTiles[0].value, isTrue);
       expect(checkboxTiles[1].value, isFalse);
     });
 
-    testWidgets('renders document preparation status items and vault button', (tester) async {
+    testWidgets('renders document preparation status items and vault button',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -311,12 +330,14 @@ void main() {
       expect(find.text('Document Preparation Status'), findsOneWidget);
       expect(find.text('Open Vault'), findsOneWidget);
       expect(find.text('Aadhaar Card'), findsOneWidget);
-      expect(find.text('Ready for Application Preparation'), findsAtLeastNWidgets(1));
+      expect(find.text('Ready for Application Preparation'),
+          findsAtLeastNWidgets(1));
       expect(find.text('Bank Passbook'), findsOneWidget);
       expect(find.text('Missing'), findsOneWidget);
     });
 
-    testWidgets('renders scheme guide with common mistakes and precautions', (tester) async {
+    testWidgets('renders scheme guide with common mistakes and precautions',
+        (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -335,13 +356,16 @@ void main() {
       // Guide Headers
       expect(find.text('Scheme Information Guide'), findsOneWidget);
       expect(find.text('Common Mistakes to Avoid'), findsOneWidget);
-      expect(find.textContaining('outdated IFSC for merged banks'), findsOneWidget);
+      expect(find.textContaining('outdated IFSC for merged banks'),
+          findsOneWidget);
       expect(find.text('Submission Precautions'), findsOneWidget);
-      expect(find.textContaining('Aadhaar is linked to active mobile'), findsOneWidget);
+      expect(find.textContaining('Aadhaar is linked to active mobile'),
+          findsOneWidget);
 
       // Official Portal Card
       expect(find.text('Official Government Portal'), findsOneWidget);
-      expect(find.text('https://pmkisan.gov.in/RegistrationFormNew.aspx'), findsOneWidget);
+      expect(find.text('https://pmkisan.gov.in/RegistrationFormNew.aspx'),
+          findsOneWidget);
       expect(find.byIcon(Icons.copy), findsOneWidget);
     });
   });

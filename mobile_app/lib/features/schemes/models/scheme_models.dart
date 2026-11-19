@@ -24,12 +24,12 @@ class EligibilityConditionModel {
   }
 
   Map<String, dynamic> toJson() => {
-    'condition_name': conditionName,
-    'field': field,
-    'operator': operator,
-    'expected_value': expectedValue,
-    'explanation': explanation,
-  };
+        'condition_name': conditionName,
+        'field': field,
+        'operator': operator,
+        'expected_value': expectedValue,
+        'explanation': explanation,
+      };
 }
 
 class ConditionEvaluationModel {
@@ -128,7 +128,8 @@ class SchemeModel {
               .toList() ??
           [],
       eligibilityCriteria: (json['eligibility_criteria'] as List<dynamic>?)
-              ?.map((e) => EligibilityConditionModel.fromJson(e as Map<String, dynamic>))
+              ?.map((e) =>
+                  EligibilityConditionModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
       requiredProfileFields: (json['required_profile_fields'] as List<dynamic>?)
@@ -146,8 +147,10 @@ class SchemeModel {
       officialSourceUrl: json['official_source_url'] as String? ?? '',
       officialApplicationUrl: json['official_application_url'] as String? ?? '',
       sourceLastVerifiedAt: json['source_last_verified_at'] as String?,
-      sourceFreshnessStatus: json['source_freshness_status'] as String? ?? 'Pending Verification',
-      eligibilitySourceReference: json['eligibility_source_reference'] as String?,
+      sourceFreshnessStatus:
+          json['source_freshness_status'] as String? ?? 'Pending Verification',
+      eligibilitySourceReference:
+          json['eligibility_source_reference'] as String?,
       benefitsSourceReference: json['benefits_source_reference'] as String?,
       sourceVerificationDetails: json['source_verification_details'] as String?,
       status: json['status'] as String? ?? 'active',
@@ -221,7 +224,10 @@ class SchemeRecommendationModel {
   });
 
   factory SchemeRecommendationModel.fromJson(Map<String, dynamic> json) {
-    final score = (json['criteria_match_percentage'] ?? json['match_score'] as num?)?.toDouble() ?? 0.0;
+    final score =
+        (json['criteria_match_percentage'] ?? json['match_score'] as num?)
+                ?.toDouble() ??
+            0.0;
     return SchemeRecommendationModel(
       scheme: SchemeModel.fromJson(json['scheme'] as Map<String, dynamic>),
       recommendationReason: json['recommendation_reason'] as String? ?? '',
@@ -276,7 +282,10 @@ class AssessmentResultModel {
   });
 
   factory AssessmentResultModel.fromJson(Map<String, dynamic> json) {
-    final score = (json['criteria_match_percentage'] ?? json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0;
+    final score = (json['criteria_match_percentage'] ??
+                json['overall_readiness_score'] as num?)
+            ?.toDouble() ??
+        0.0;
     return AssessmentResultModel(
       assessmentId: json['assessment_id'] as String? ?? '',
       schemeId: json['scheme_id'] as String? ?? '',
@@ -288,7 +297,8 @@ class AssessmentResultModel {
       scoreInterpretation: json['score_interpretation'] as String? ??
           'Criteria Match Percentage reflects the proportion of predefined conditions verified as satisfied based on your profile. It does NOT represent government approval likelihood.',
       conditionsBreakdown: (json['conditions_breakdown'] as List<dynamic>?)
-              ?.map((e) => ConditionEvaluationModel.fromJson(e as Map<String, dynamic>))
+              ?.map((e) =>
+                  ConditionEvaluationModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
       satisfiedCount: json['satisfied_count'] as int? ?? 0,
@@ -333,7 +343,10 @@ class AssessmentHistoryItemModel {
   });
 
   factory AssessmentHistoryItemModel.fromJson(Map<String, dynamic> json) {
-    final score = (json['criteria_match_percentage'] ?? json['overall_readiness_score'] as num?)?.toDouble() ?? 0.0;
+    final score = (json['criteria_match_percentage'] ??
+                json['overall_readiness_score'] as num?)
+            ?.toDouble() ??
+        0.0;
     return AssessmentHistoryItemModel(
       assessmentId: json['assessment_id'] as String? ?? '',
       schemeId: json['scheme_id'] as String?,

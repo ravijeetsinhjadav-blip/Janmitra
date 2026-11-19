@@ -6,7 +6,8 @@ import 'package:janmitra_assist/features/auth/presentation/screens/login_screen.
 import 'package:janmitra_assist/features/auth/presentation/screens/splash_screen.dart';
 
 void main() {
-  testWidgets('JanMitra Assist launch and splash screen verification test', (WidgetTester tester) async {
+  testWidgets('JanMitra Assist launch and splash screen verification test',
+      (WidgetTester tester) async {
     // Build the app with zero splash delay for isolated widget testing
     await tester.pumpWidget(const JanMitraApp(
       homeOverride: SplashScreen(delay: Duration.zero),
@@ -17,16 +18,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   });
 
-  testWidgets('LoginScreen citizen sign-in verification test', (WidgetTester tester) async {
+  testWidgets('LoginScreen citizen sign-in verification test',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const JanMitraApp(homeOverride: LoginScreen()));
 
     // Verify login screen elements
     expect(find.text('Citizen Sign In'), findsOneWidget);
-    expect(find.text('Get OTP'), findsOneWidget);
+    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.text('Register Here'), findsOneWidget);
     expect(find.text('Citizen Privacy Commitment'), findsOneWidget);
   });
 
-  testWidgets('HomeScreen Phase 3 citizen status verification test', (WidgetTester tester) async {
+  testWidgets('HomeScreen Phase 3 citizen status verification test',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const JanMitraApp(homeOverride: HomeScreen()));
 
     // Verify home screen elements

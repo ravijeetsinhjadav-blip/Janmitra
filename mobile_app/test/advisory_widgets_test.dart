@@ -5,7 +5,9 @@ import 'package:janmitra_assist/features/readiness/presentation/screens/ai_advis
 
 void main() {
   group('Advisory Models Unit Tests', () {
-    test('AdvisoryAssessmentModel correctly serializes and deserializes from JSON', () {
+    test(
+        'AdvisoryAssessmentModel correctly serializes and deserializes from JSON',
+        () {
       final json = {
         'assessment_id': '11111111-1111-1111-1111-111111111111',
         'scheme_id': '22222222-2222-2222-2222-222222222222',
@@ -26,14 +28,23 @@ void main() {
           'low_confidence_documents': [],
         },
         'advisory': {
-          'summary': 'You meet preliminary criteria for PM-KISAN with 100% criteria match.',
-          'assessment_explanation': 'Your profile satisfies the evaluated landholding parameters.',
+          'summary':
+              'You meet preliminary criteria for PM-KISAN with 100% criteria match.',
+          'assessment_explanation':
+              'Your profile satisfies the evaluated landholding parameters.',
           'criteria_analysis': [
-            {'condition': 'Landholding', 'status': 'satisfied', 'note': 'Landholding satisfied.'}
+            {
+              'condition': 'Landholding',
+              'status': 'satisfied',
+              'note': 'Landholding satisfied.'
+            }
           ],
           'document_analysis': 'Uploaded 2 of 3 required documents.',
           'potential_inconsistencies': [],
-          'next_steps': ['Upload bank passbook to vault', 'Visit pmkisan.gov.in'],
+          'next_steps': [
+            'Upload bank passbook to vault',
+            'Visit pmkisan.gov.in'
+          ],
           'official_portal_guidance': 'Visit pmkisan.gov.in to register.',
           'citations': [
             {
@@ -47,11 +58,13 @@ void main() {
           ],
           'language': 'en',
           'is_mock': true,
-          'disclaimer': 'Advisory Notice: This guidance is AI-assisted and does not replace official determinations.',
+          'disclaimer':
+              'Advisory Notice: This guidance is AI-assisted and does not replace official determinations.',
         },
         'evaluated_at': '2026-10-31T12:00:00Z',
         'official_source_url': 'https://pmkisan.gov.in/',
-        'official_application_url': 'https://pmkisan.gov.in/RegistrationFormNew.aspx',
+        'official_application_url':
+            'https://pmkisan.gov.in/RegistrationFormNew.aspx',
       };
 
       final model = AdvisoryAssessmentModel.fromJson(json);
@@ -72,7 +85,8 @@ void main() {
       expect(model.advisory.isMock, isTrue);
     });
 
-    test('ReadinessBreakdownModel handles low confidence and discrepancies', () {
+    test('ReadinessBreakdownModel handles low confidence and discrepancies',
+        () {
       final json = {
         'overall_readiness_score': 52.0,
         'criteria_match_percentage': 60.0,
@@ -80,7 +94,8 @@ void main() {
         'information_completeness_percentage': 60.0,
         'consistency_score': 50.0,
         'consistency_status': 'Discrepancy Detected',
-        'score_interpretation': 'Discrepancy detected between profile and documents.',
+        'score_interpretation':
+            'Discrepancy detected between profile and documents.',
         'uploaded_document_types': ['Aadhaar Card'],
         'missing_document_types': ['Ration Card'],
         'discrepancies': ['Name mismatch in Aadhaar Card'],
@@ -116,15 +131,25 @@ void main() {
         lowConfidenceDocuments: [],
       ),
       advisory: AIAdvisoryGuidanceModel(
-        summary: 'Your family is eligible for cashless hospitalization up to ₹5 Lakh/year.',
-        assessmentExplanation: 'Income and SECC deprivation criteria are fully satisfied.',
+        summary:
+            'Your family is eligible for cashless hospitalization up to ₹5 Lakh/year.',
+        assessmentExplanation:
+            'Income and SECC deprivation criteria are fully satisfied.',
         criteriaAnalysis: [
-          ConditionAnalysisModel(condition: 'Annual Income', status: 'satisfied', note: 'Income within limits.')
+          ConditionAnalysisModel(
+              condition: 'Annual Income',
+              status: 'satisfied',
+              note: 'Income within limits.')
         ],
-        documentAnalysis: 'All mandatory identity and household documents are uploaded in vault.',
+        documentAnalysis:
+            'All mandatory identity and household documents are uploaded in vault.',
         potentialInconsistencies: [],
-        nextSteps: ['Visit empanelled hospital Aarogyamitra desk', 'Present Aadhaar for golden card generation'],
-        officialPortalGuidance: 'Visit pmjay.gov.in to locate network hospitals.',
+        nextSteps: [
+          'Visit empanelled hospital Aarogyamitra desk',
+          'Present Aadhaar for golden card generation'
+        ],
+        officialPortalGuidance:
+            'Visit pmjay.gov.in to locate network hospitals.',
         citations: [
           CitationModel(
             title: 'NHA BIS Guidelines',
@@ -137,14 +162,17 @@ void main() {
         ],
         language: 'en',
         isMock: true,
-        disclaimer: 'Advisory Notice: This guidance is AI-assisted and does not constitute official government approval.',
+        disclaimer:
+            'Advisory Notice: This guidance is AI-assisted and does not constitute official government approval.',
       ),
       evaluatedAt: DateTime.now(),
       officialSourceUrl: 'https://pmjay.gov.in/',
       officialApplicationUrl: 'https://mera.pmjay.gov.in/',
     );
 
-    testWidgets('Renders advisory screen with score gauge, language selector, and next steps', (tester) async {
+    testWidgets(
+        'Renders advisory screen with score gauge, language selector, and next steps',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: AIAdvisoryScreen(initialAdvisory: sampleAdvisory),
@@ -158,7 +186,9 @@ void main() {
       expect(find.text('ગુજરાતી'), findsOneWidget);
 
       // Verify Statutory Advisory Banner
-      expect(find.textContaining('Advisory Notice: This guidance is AI-assisted'), findsOneWidget);
+      expect(
+          find.textContaining('Advisory Notice: This guidance is AI-assisted'),
+          findsOneWidget);
 
       // Verify Scheme Overview
       expect(find.text('Ayushman Bharat PM-JAY'), findsOneWidget);
@@ -172,16 +202,22 @@ void main() {
       expect(find.text('Document Consistency'), findsOneWidget);
 
       // Verify AI Guidance & Next Steps
-      expect(find.textContaining('Your family is eligible for cashless hospitalization'), findsOneWidget);
+      expect(
+          find.textContaining(
+              'Your family is eligible for cashless hospitalization'),
+          findsOneWidget);
       expect(find.text('Actionable Next Steps'), findsOneWidget);
-      expect(find.textContaining('Visit empanelled hospital Aarogyamitra desk'), findsOneWidget);
+      expect(find.textContaining('Visit empanelled hospital Aarogyamitra desk'),
+          findsOneWidget);
 
       // Verify Citations
       expect(find.text('Verified Scheme Source References'), findsOneWidget);
       expect(find.text('NHA BIS Guidelines'), findsOneWidget);
     });
 
-    testWidgets('Renders discrepancy warning banner when inconsistencies are detected', (tester) async {
+    testWidgets(
+        'Renders discrepancy warning banner when inconsistencies are detected',
+        (tester) async {
       final discrepancyAdvisory = AdvisoryAssessmentModel(
         assessmentId: 'test-disc-uuid',
         schemeId: 'test-scheme-uuid',
@@ -203,10 +239,13 @@ void main() {
         ),
         advisory: AIAdvisoryGuidanceModel(
           summary: 'Missing mandatory job card and name mismatch detected.',
-          assessmentExplanation: 'Cannot verify housing deprivation without complete records.',
+          assessmentExplanation:
+              'Cannot verify housing deprivation without complete records.',
           criteriaAnalysis: [],
           documentAnalysis: 'Upload MGNREGA Job Card.',
-          potentialInconsistencies: ['Name in profile differs from name in Aadhaar Card.'],
+          potentialInconsistencies: [
+            'Name in profile differs from name in Aadhaar Card.'
+          ],
           nextSteps: ['Correct name on profile or re-upload Aadhaar'],
           officialPortalGuidance: 'Visit pmayg.nic.in',
           citations: [],
@@ -226,7 +265,10 @@ void main() {
       );
 
       expect(find.text('Potential Inconsistencies Detected'), findsOneWidget);
-      expect(find.textContaining('Name in profile differs from name in Aadhaar Card'), findsOneWidget);
+      expect(
+          find.textContaining(
+              'Name in profile differs from name in Aadhaar Card'),
+          findsOneWidget);
       expect(find.text('Discrepancy Detected'), findsWidgets);
     });
   });

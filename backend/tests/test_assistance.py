@@ -9,15 +9,28 @@ from app.core.config import settings
 VALID_PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\ntrailer\n<<\n>>\n%%EOF"
 
 
-def get_auth_headers(client, mobile_number: str) -> dict:
-    """Authenticate citizen via mock OTP and return Bearer headers."""
-    res_otp = client.post("/api/v1/auth/send-otp", json={"mobile_number": mobile_number})
-    otp = res_otp.json()["dev_otp"]
-    res_verify = client.post(
-        "/api/v1/auth/verify-otp",
-        json={"mobile_number": mobile_number, "otp": otp},
+def get_auth_headers(client, mobile_number: str = "+919876543210") -> dict:
+    """Authenticate citizen via Email+Password and return Bearer headers."""
+    clean_id = "".join(c for c in mobile_number if c.isalnum()) or "default"
+    email = f"user_{clean_id}@example.com"
+    res_reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "Password@12345",
+            "confirm_password": "Password@12345",
+            "full_name": "Test Citizen",
+            "mobile_number": mobile_number,
+        },
     )
-    token = res_verify.json()["access_token"]
+    if res_reg.status_code == 201:
+        token = res_reg.json()["access_token"]
+    else:
+        res_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "Password@12345"},
+        )
+        token = res_login.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -302,3 +315,147 @@ class TestApplicationAssistanceModule:
         assert "supporting_documents_specs" in data
         assert len(data["common_mistakes_to_avoid"]) > 0
         assert len(data["portal_steps"]) > 0
+
+    def test_export_preparation_packet_successful(self, client):
+        """Packet export endpoint returns consolidated, printable preparation packet without PII."""
+        headers = get_auth_headers(client, "+919922000010")
+        res_schemes = client.get("/api/v1/schemes")
+        scheme_id = res_schemes.json()["items"][0]["id"]
+
+        res = client.get(
+            f"/api/v1/assistance/schemes/{scheme_id}/packet-export?language=en",
+            headers=headers,
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+
+        assert data["scheme_id"] == scheme_id
+        assert "scheme_name" in data and len(data["scheme_name"]) > 0
+        assert "department" in data
+        assert "category" in data
+        assert data["official_source_url"].startswith("http")
+        assert data["official_application_url"].startswith("http")
+        assert "generated_at" in data
+        assert data["language"] == "en"
+        assert "criteria_match_percentage" in data
+        assert "readiness_score" in data
+        assert len(data["document_statuses"]) > 0
+        assert len(data["checklist"]) > 0
+        assert len(data["portal_steps"]) > 0
+        assert len(data["common_mistakes"]) > 0
+        assert len(data["precautions"]) > 0
+        assert "Verified against official portal" in data["source_verification_details"]
+        assert "not a government agency and does not submit applications" in data["statutory_disclaimer"].lower()
+
+    def test_export_preparation_packet_excludes_pii(self, client):
+        """Exported packet strictly omits any citizen PII, Aadhaar numbers, and raw OCR dumps."""
+        headers = get_auth_headers(client, "+919922000011")
+        res_schemes = client.get("/api/v1/schemes")
+        scheme_id = res_schemes.json()["items"][0]["id"]
+
+        res = client.get(
+            f"/api/v1/assistance/schemes/{scheme_id}/packet-export?language=en",
+            headers=headers,
+        )
+        assert res.status_code == 200
+        packet_json = res.text
+
+        import re
+        assert "+919922000011" not in packet_json
+        assert "user_9922000011@example.com" not in packet_json
+        # Strip UUID tokens before asserting absence of standalone 12-digit Aadhaar numbers
+        non_uuid_text = re.sub(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", "", packet_json)
+        assert not re.search(r"\b\d{4}\s\d{4}\s\d{4}\b", non_uuid_text)
+        assert not re.search(r"\b\d{12}\b", non_uuid_text)
+
+    def test_export_preparation_packet_multilingual_hindi(self, client):
+        """Exported packet supports Hindi guidance with genuine Devanagari content."""
+        headers = get_auth_headers(client, "+919922000012")
+        res_schemes = client.get("/api/v1/schemes")
+        scheme_id = res_schemes.json()["items"][0]["id"]
+
+        res = client.get(
+            f"/api/v1/assistance/schemes/{scheme_id}/packet-export?language=hi",
+            headers=headers,
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["language"] == "hi"
+        assert any("\u0900" <= c <= "\u097F" for c in data["common_mistakes"][0])
+        assert any("\u0900" <= c <= "\u097F" for c in data["precautions"][0])
+
+    def test_dynamic_document_checklist_synchronization_on_deletion(self, db_session, client):
+        """Checklist dynamically marks document incomplete when vault file is removed or missing."""
+        headers = get_auth_headers(client, "+919922000013")
+
+        # Create scheme requiring Domicile Certificate
+        scheme = Scheme(
+            scheme_name=f"Test Sync Scheme {uuid.uuid4().hex[:6]}",
+            category="Welfare",
+            department="Social Welfare",
+            description="Testing doc deletion sync",
+            eligibility_summary="Testing",
+            required_documents=["Domicile Certificate"],
+            eligibility_criteria=[],
+            official_source_url="https://myscheme.gov.in/",
+            official_application_url="https://myscheme.gov.in/apply",
+            is_active=True,
+        )
+        db_session.add(scheme)
+        db_session.commit()
+
+        # 1. Upload a Domicile Certificate
+        res_up = client.post(
+            "/api/v1/documents/upload",
+            files={"file": ("domicile.pdf", io.BytesIO(VALID_PDF_BYTES), "application/pdf")},
+            data={"document_type": "domicile_certificate"},
+            headers=headers,
+        )
+        assert res_up.status_code in [200, 201]
+        doc_id = res_up.json()["document"]["id"]
+
+        # 2. Prepare application while document is present in vault
+        res_prep1 = client.post(
+            f"/api/v1/assistance/schemes/{scheme.id}/prepare",
+            json={"language": "en"},
+            headers=headers,
+        )
+        assert res_prep1.status_code == 200
+        domicile_status1 = next(
+            (ds for ds in res_prep1.json()["document_preparation_statuses"] if "domicile" in ds["document_name"].lower()),
+            None,
+        )
+        assert domicile_status1 is not None
+        assert domicile_status1["status"] in ["Ready for Application Preparation", "Available"]
+
+        domicile_item1 = next(
+            (it for it in res_prep1.json()["checklist"] if "domicile" in it["item_id"]),
+            None,
+        )
+        assert domicile_item1 is not None
+        assert domicile_item1["is_completed"] is True
+
+        # 3. Delete the uploaded document from Vault
+        res_del = client.delete(f"/api/v1/documents/{doc_id}", headers=headers)
+        assert res_del.status_code in [200, 204]
+
+        # 4. Prepare application again: domicile must now be incomplete (is_completed=False, status=Missing)
+        res_prep2 = client.post(
+            f"/api/v1/assistance/schemes/{scheme.id}/prepare",
+            json={"language": "en"},
+            headers=headers,
+        )
+        assert res_prep2.status_code == 200
+        domicile_status2 = next(
+            (ds for ds in res_prep2.json()["document_preparation_statuses"] if "domicile" in ds["document_name"].lower()),
+            None,
+        )
+        assert domicile_status2 is not None
+        assert domicile_status2["status"] == "Missing"
+
+        domicile_item2 = next(
+            (it for it in res_prep2.json()["checklist"] if "domicile" in it["item_id"]),
+            None,
+        )
+        assert domicile_item2 is not None
+        assert domicile_item2["is_completed"] is False

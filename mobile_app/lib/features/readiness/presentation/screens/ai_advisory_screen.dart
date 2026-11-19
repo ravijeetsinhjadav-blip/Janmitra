@@ -53,14 +53,18 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
 
       if (widget.assessmentId != null) {
         if (language != null && language != _advisory?.advisory.language) {
-          result = await _advisoryService.regenerateAdvisory(widget.assessmentId!, language: lang);
+          result = await _advisoryService
+              .regenerateAdvisory(widget.assessmentId!, language: lang);
         } else {
-          result = await _advisoryService.getAssessmentAdvisory(widget.assessmentId!);
+          result = await _advisoryService
+              .getAssessmentAdvisory(widget.assessmentId!);
         }
       } else if (widget.schemeId != null) {
-        result = await _advisoryService.assessAndAdvise(widget.schemeId!, language: lang);
+        result = await _advisoryService.assessAndAdvise(widget.schemeId!,
+            language: lang);
       } else if (_advisory != null) {
-        result = await _advisoryService.regenerateAdvisory(_advisory!.assessmentId, language: lang);
+        result = await _advisoryService
+            .regenerateAdvisory(_advisory!.assessmentId, language: lang);
       } else {
         throw Exception('No scheme or assessment ID provided.');
       }
@@ -153,8 +157,11 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-              Text('${percentage.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+              Text(label,
+                  style: const TextStyle(fontSize: 12, color: Colors.black87)),
+              Text('${percentage.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold, color: color)),
             ],
           ),
           const SizedBox(height: 3),
@@ -197,7 +204,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Synthesizing AI Advisory Guidance & Readiness...', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                  Text('Synthesizing AI Advisory Guidance & Readiness...',
+                      style: TextStyle(fontSize: 13, color: Colors.black54)),
                 ],
               ),
             )
@@ -208,9 +216,12 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        const Icon(Icons.error_outline,
+                            size: 48, color: Colors.red),
                         const SizedBox(height: 12),
-                        Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14)),
+                        Text(_errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 14)),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
                           onPressed: () => _loadAdvisory(),
@@ -222,7 +233,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                   ),
                 )
               : _advisory == null
-                  ? const Center(child: Text('No advisory information available.'))
+                  ? const Center(
+                      child: Text('No advisory information available.'))
                   : _buildAdvisoryContent(),
     );
   }
@@ -232,7 +244,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
     final readiness = adv.readiness;
     final guidance = adv.advisory;
     final statusColor = _getStatusColor(adv.overallStatus);
-    final readinessScoreColor = _getReadinessScoreColor(readiness.overallReadinessScore);
+    final readinessScoreColor =
+        _getReadinessScoreColor(readiness.overallReadinessScore);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -271,7 +284,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
           // Scheme Overview Card
           Card(
             elevation: 1,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -281,28 +295,42 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(adv.category, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                        child: Text(adv.category,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primaryBlue)),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                          border: Border.all(
+                              color: statusColor.withValues(alpha: 0.3)),
                         ),
-                        child: Text(adv.overallStatus, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
+                        child: Text(adv.overallStatus,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Text(
                     adv.schemeName,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87),
                   ),
                 ],
               ),
@@ -313,7 +341,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
           // Multi-Dimensional Readiness Dashboard
           Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -325,45 +354,66 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                       const SizedBox(width: 8),
                       const Text(
                         'Application Readiness Score',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
                       Text(
                         '${readiness.overallReadinessScore.toStringAsFixed(1)}%',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: readinessScoreColor),
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: readinessScoreColor),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
                     readiness.scoreInterpretation,
-                    style: const TextStyle(fontSize: 11, color: Colors.black54, height: 1.3),
+                    style: const TextStyle(
+                        fontSize: 11, color: Colors.black54, height: 1.3),
                   ),
                   const Divider(height: 20),
 
                   // 4 Component Scores
-                  _buildScoreBar('Criteria Match', readiness.criteriaMatchPercentage, AppTheme.primaryBlue),
-                  _buildScoreBar('Required Document Type Coverage', readiness.documentCoveragePercentage, AppTheme.accentGreen),
-                  _buildScoreBar('Information Completeness', readiness.informationCompletenessPercentage, Colors.purple),
-                  _buildScoreBar('Document Consistency', readiness.consistencyScore, Colors.teal),
+                  _buildScoreBar('Criteria Match',
+                      readiness.criteriaMatchPercentage, AppTheme.primaryBlue),
+                  _buildScoreBar(
+                      'Required Document Type Coverage',
+                      readiness.documentCoveragePercentage,
+                      AppTheme.accentGreen),
+                  _buildScoreBar(
+                      'Information Completeness',
+                      readiness.informationCompletenessPercentage,
+                      Colors.purple),
+                  _buildScoreBar('Document Consistency',
+                      readiness.consistencyScore, Colors.teal),
 
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Text('Consistency Status: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      const Text('Consistency Status: ',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold)),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: _getConsistencyColor(readiness.consistencyStatus).withValues(alpha: 0.1),
+                          color:
+                              _getConsistencyColor(readiness.consistencyStatus)
+                                  .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: _getConsistencyColor(readiness.consistencyStatus)),
+                          border: Border.all(
+                              color: _getConsistencyColor(
+                                  readiness.consistencyStatus)),
                         ),
                         child: Text(
                           readiness.consistencyStatus,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: _getConsistencyColor(readiness.consistencyStatus),
+                            color: _getConsistencyColor(
+                                readiness.consistencyStatus),
                           ),
                         ),
                       ),
@@ -381,7 +431,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
             color: Colors.blue.shade50.withValues(alpha: 0.5),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
-              side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
+              side: BorderSide(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14.0),
@@ -390,22 +441,36 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.auto_awesome, color: AppTheme.primaryBlue, size: 20),
+                      const Icon(Icons.auto_awesome,
+                          color: AppTheme.primaryBlue, size: 20),
                       const SizedBox(width: 8),
-                      const Text('AI Advisory Evaluation', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                      const Text('AI Advisory Evaluation',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryBlue)),
                       const Spacer(),
                       if (guidance.isMock)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
-                          child: const Text('Dev Simulation', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4)),
+                          child: const Text('Dev Simulation',
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.black54)),
                         ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(guidance.summary, style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.black87)),
+                  Text(guidance.summary,
+                      style: const TextStyle(
+                          fontSize: 13, height: 1.4, color: Colors.black87)),
                   const SizedBox(height: 8),
-                  Text(guidance.assessmentExplanation, style: const TextStyle(fontSize: 12, height: 1.4, color: Colors.black54)),
+                  Text(guidance.assessmentExplanation,
+                      style: const TextStyle(
+                          fontSize: 12, height: 1.4, color: Colors.black54)),
                 ],
               ),
             ),
@@ -415,7 +480,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
           // Document Intelligence Analysis
           Card(
             elevation: 1,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             child: Padding(
               padding: const EdgeInsets.all(14.0),
               child: Column(
@@ -423,24 +489,33 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.description_outlined, color: AppTheme.primaryDark, size: 20),
+                      Icon(Icons.description_outlined,
+                          color: AppTheme.primaryDark, size: 20),
                       SizedBox(width: 8),
-                      Text('Document Intelligence', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text('Document Intelligence',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(guidance.documentAnalysis, style: const TextStyle(fontSize: 12, height: 1.3, color: Colors.black87)),
+                  Text(guidance.documentAnalysis,
+                      style: const TextStyle(
+                          fontSize: 12, height: 1.3, color: Colors.black87)),
                   const SizedBox(height: 10),
-
                   if (readiness.uploadedDocumentTypes.isNotEmpty) ...[
-                    const Text('Uploaded Types in Vault:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
+                    const Text('Uploaded Types in Vault:',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54)),
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
                       children: readiness.uploadedDocumentTypes
                           .map((t) => Chip(
-                                label: Text(t, style: const TextStyle(fontSize: 11)),
+                                label: Text(t,
+                                    style: const TextStyle(fontSize: 11)),
                                 visualDensity: VisualDensity.compact,
                                 backgroundColor: Colors.green.shade50,
                               ))
@@ -448,16 +523,22 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                     ),
                     const SizedBox(height: 8),
                   ],
-
                   if (readiness.missingDocumentTypes.isNotEmpty) ...[
-                    const Text('Missing Document Types:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red)),
+                    const Text('Missing Document Types:',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red)),
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
                       children: readiness.missingDocumentTypes
                           .map((t) => Chip(
-                                label: Text(t, style: TextStyle(fontSize: 11, color: Colors.red.shade900)),
+                                label: Text(t,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.red.shade900)),
                                 visualDensity: VisualDensity.compact,
                                 backgroundColor: Colors.red.shade50,
                               ))
@@ -466,7 +547,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
                       onPressed: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DocumentVaultScreen()));
+                        Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const DocumentVaultScreen()));
                       },
                       icon: const Icon(Icons.upload_file, size: 16),
                       label: const Text('Open Vault & Upload Missing Docs'),
@@ -492,9 +574,14 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded, color: Colors.red.shade900, size: 20),
+                      Icon(Icons.warning_amber_rounded,
+                          color: Colors.red.shade900, size: 20),
                       const SizedBox(width: 8),
-                      Text('Potential Inconsistencies Detected', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red.shade900)),
+                      Text('Potential Inconsistencies Detected',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade900)),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -503,8 +590,15 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                            Expanded(child: Text(disc, style: TextStyle(fontSize: 12, color: Colors.red.shade900))),
+                            const Text('• ',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red)),
+                            Expanded(
+                                child: Text(disc,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.red.shade900))),
                           ],
                         ),
                       )),
@@ -517,7 +611,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
           // Next Steps Preparation Checklist
           Card(
             elevation: 1,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             child: Padding(
               padding: const EdgeInsets.all(14.0),
               child: Column(
@@ -525,9 +620,12 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.checklist, color: AppTheme.primaryBlue, size: 20),
+                      Icon(Icons.checklist,
+                          color: AppTheme.primaryBlue, size: 20),
                       SizedBox(width: 8),
-                      Text('Actionable Next Steps', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text('Actionable Next Steps',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -538,11 +636,21 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                           children: [
                             CircleAvatar(
                               radius: 10,
-                              backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                              child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                              backgroundColor:
+                                  AppTheme.primaryBlue.withValues(alpha: 0.1),
+                              child: Text('${entry.key + 1}',
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryBlue)),
                             ),
                             const SizedBox(width: 10),
-                            Expanded(child: Text(entry.value, style: const TextStyle(fontSize: 12, height: 1.3, color: Colors.black87))),
+                            Expanded(
+                                child: Text(entry.value,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        height: 1.3,
+                                        color: Colors.black87))),
                           ],
                         ),
                       )),
@@ -558,7 +666,8 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
             color: Colors.green.shade50.withValues(alpha: 0.5),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
-              side: BorderSide(color: AppTheme.accentGreen.withValues(alpha: 0.3)),
+              side: BorderSide(
+                  color: AppTheme.accentGreen.withValues(alpha: 0.3)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14.0),
@@ -569,11 +678,17 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                     children: [
                       Icon(Icons.public, color: AppTheme.accentGreen, size: 20),
                       SizedBox(width: 8),
-                      Text('Official Application Portal', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.accentGreen)),
+                      Text('Official Application Portal',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.accentGreen)),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(guidance.officialPortalGuidance, style: const TextStyle(fontSize: 12, height: 1.3, color: Colors.black87)),
+                  Text(guidance.officialPortalGuidance,
+                      style: const TextStyle(
+                          fontSize: 12, height: 1.3, color: Colors.black87)),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -583,15 +698,18 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => ApplicationAssistanceScreen(
+                                builder: (context) =>
+                                    ApplicationAssistanceScreen(
                                   schemeId: adv.schemeId,
                                   schemeName: adv.schemeName,
                                 ),
                               ),
                             );
                           },
-                          icon: const Icon(Icons.assignment_turned_in_outlined, size: 16),
-                          label: const Text('Prepare Application with Checklist'),
+                          icon: const Icon(Icons.assignment_turned_in_outlined,
+                              size: 16),
+                          label:
+                              const Text('Prepare Application with Checklist'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryBlue,
                             foregroundColor: Colors.white,
@@ -603,10 +721,12 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: adv.officialApplicationUrl));
+                      Clipboard.setData(
+                          ClipboardData(text: adv.officialApplicationUrl));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Copied official URL: ${adv.officialApplicationUrl}'),
+                          content: Text(
+                              'Copied official URL: ${adv.officialApplicationUrl}'),
                           duration: const Duration(seconds: 3),
                         ),
                       );
@@ -626,12 +746,17 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
 
           // Official RAG Citations
           if (guidance.citations.isNotEmpty) ...[
-            const Text('Verified Scheme Source References', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+            const Text('Verified Scheme Source References',
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87)),
             const SizedBox(height: 6),
             ...guidance.citations.map((cite) => Card(
                   margin: const EdgeInsets.symmetric(vertical: 4),
                   elevation: 0.5,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                   child: Padding(
                     padding: const EdgeInsets.all(10.0),
                     child: Column(
@@ -639,19 +764,29 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                       children: [
                         Row(
                           children: [
-                            Expanded(child: Text(cite.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                            Expanded(
+                                child: Text(cite.title,
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold))),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: _getFreshnessColor(cite.sourceFreshnessStatus).withValues(alpha: 0.1),
+                                color: _getFreshnessColor(
+                                        cite.sourceFreshnessStatus)
+                                    .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: _getFreshnessColor(cite.sourceFreshnessStatus)),
+                                border: Border.all(
+                                    color: _getFreshnessColor(
+                                        cite.sourceFreshnessStatus)),
                               ),
                               child: Text(
                                 cite.sourceFreshnessStatus,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: _getFreshnessColor(cite.sourceFreshnessStatus),
+                                  color: _getFreshnessColor(
+                                      cite.sourceFreshnessStatus),
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -660,10 +795,14 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
                         ),
                         if (cite.sourceReference != null) ...[
                           const SizedBox(height: 2),
-                          Text(cite.sourceReference!, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                          Text(cite.sourceReference!,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black54)),
                         ],
                         const SizedBox(height: 2),
-                        Text(cite.sourceUrl, style: const TextStyle(fontSize: 10, color: AppTheme.primaryBlue)),
+                        Text(cite.sourceUrl,
+                            style: const TextStyle(
+                                fontSize: 10, color: AppTheme.primaryBlue)),
                       ],
                     ),
                   ),
@@ -674,4 +813,3 @@ class _AIAdvisoryScreenState extends State<AIAdvisoryScreen> {
     );
   }
 }
-

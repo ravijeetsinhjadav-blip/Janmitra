@@ -112,3 +112,44 @@ class ApplicationAssistanceResponse(BaseModel):
         "Guidance does not guarantee official approval."
     )
 
+
+class AdvancedCompletenessResponse(BaseModel):
+    """Premium-exclusive application completeness and optimization analysis."""
+    scheme_id: UUID
+    is_premium_analysis: bool = True
+    completeness_score: float
+    field_gap_analysis: List[Dict[str, Any]] = Field(default_factory=list)
+    document_readiness_optimizations: List[str] = Field(default_factory=list)
+    expedited_action_plan: List[str] = Field(default_factory=list)
+    disclaimer: str = (
+        "Premium Completeness Analysis: Identifies preparation gaps prior to portal submission. "
+        "It does not guarantee government scheme approval."
+    )
+
+
+class ApplicationPreparationPacketResponse(BaseModel):
+    """Consolidated, printable/downloadable summary of scheme application preparation.
+    Strictly contains no PII, Aadhaar numbers, or raw OCR tokens.
+    """
+    scheme_id: UUID
+    scheme_name: str
+    department: str
+    category: str
+    official_source_url: str
+    official_application_url: str
+    generated_at: datetime
+    language: str = "en"
+    criteria_match_percentage: float
+    readiness_score: float
+    document_statuses: List[DocumentPreparationStatusItem] = Field(default_factory=list)
+    checklist: List[ChecklistItem] = Field(default_factory=list)
+    portal_steps: List[PortalStepInstruction] = Field(default_factory=list)
+    common_mistakes: List[str] = Field(default_factory=list)
+    precautions: List[str] = Field(default_factory=list)
+    source_verification_details: Optional[str] = None
+    statutory_disclaimer: str = (
+        "Advisory Notice: JanMitra Assist is an application preparation assistant. "
+        "It is not a government agency and does not submit applications on your behalf. "
+        "Guidance does not guarantee official approval."
+    )
+

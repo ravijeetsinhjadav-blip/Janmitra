@@ -25,7 +25,8 @@ class SubscriptionService {
 
   /// Retrieve available subscription plans catalog
   Future<SubscriptionPlansResponseModel> getPlans() async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.subscriptionsPlans}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.subscriptionsPlans}');
     final headers = await _buildHeaders();
 
     final response = await http.get(uri, headers: headers);
@@ -41,7 +42,8 @@ class SubscriptionService {
 
   /// Retrieve authenticated citizen's current subscription and quota status
   Future<CitizenSubscriptionModel> getMySubscription() async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.subscriptionsMe}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.subscriptionsMe}');
     final headers = await _buildHeaders();
 
     final response = await http.get(uri, headers: headers);
@@ -57,7 +59,8 @@ class SubscriptionService {
 
   /// Create a secure Razorpay order on backend
   Future<RazorpayOrderModel> createOrder({required String billingCycle}) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.paymentsCreateOrder}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.paymentsCreateOrder}');
     final headers = await _buildHeaders();
     final body = jsonEncode({
       'plan_type': 'premium',
@@ -82,7 +85,8 @@ class SubscriptionService {
     required String signature,
     String? paymentMethod,
   }) async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.paymentsVerify}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.paymentsVerify}');
     final headers = await _buildHeaders();
     final body = jsonEncode({
       'razorpay_order_id': orderId,
@@ -104,7 +108,8 @@ class SubscriptionService {
 
   /// Retrieve citizen's past payment history
   Future<PaymentHistoryResponseModel> getPaymentHistory() async {
-    final uri = Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.paymentsHistory}');
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.paymentsHistory}');
     final headers = await _buildHeaders();
 
     final response = await http.get(uri, headers: headers);
@@ -114,6 +119,25 @@ class SubscriptionService {
       return PaymentHistoryResponseModel.fromJson(data);
     } else {
       final msg = data['detail'] ?? 'Failed to load payment history';
+      throw Exception(msg);
+    }
+  }
+
+  /// Cancel citizen's active Premium subscription and revert to Free tier
+  Future<CitizenSubscriptionModel> cancelSubscription() async {
+    final uri =
+        Uri.parse('${ApiEndpoints.baseUrl}${ApiEndpoints.subscriptionsCancel}');
+    final headers = await _buildHeaders();
+
+    final response = await http.post(uri, headers: headers);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode == 200) {
+      return CitizenSubscriptionModel.fromJson(
+        data['subscription'] as Map<String, dynamic>,
+      );
+    } else {
+      final msg = data['detail'] ?? 'Failed to cancel subscription';
       throw Exception(msg);
     }
   }

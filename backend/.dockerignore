@@ -1,0 +1,35 @@
+# Virtual environment & Python caches
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local databases & backups
+*.db
+*.db.*
+*.sqlite
+*.sqlite3
+
+# Document storage & test uploads
+storage/documents/*
+!storage/documents/.gitkeep
+
+# Environment secrets & local config
+.env
+.env.*
+!.env.example
+
+# Testing & linting artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+verify_seed_audit.py
+
+# Git & OS metadata
+.git/
+.gitignore
+.DS_Store
+Thumbs.db

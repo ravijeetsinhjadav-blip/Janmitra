@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Primary brand colors
-  static const Color primaryBlue = Color(0xFF1565C0);      // Professional civic blue
-  static const Color secondaryBlue = Color(0xFF0D47A1);    // Deep accent blue
-  static const Color primaryDark = Color(0xFF0F172A);      // Deep navy for typography
-  static const Color accentGreen = Color(0xFF2E7D32);      // Civic green
-  static const Color surfaceBg = Color(0xFFF8FAFC);        // Clean neutral light background
+  static const Color primaryBlue = Color(0xFF1565C0); // Professional civic blue
+  static const Color secondaryBlue = Color(0xFF0D47A1); // Deep accent blue
+  static const Color primaryDark =
+      Color(0xFF0F172A); // Deep navy for typography
+  static const Color primaryNavy = Color(0xFF1E3A8A); // Deep navy blue
+  static const Color accentGreen = Color(0xFF2E7D32); // Civic green
+  static const Color successGreen = Color(0xFF15803D); // Success green
+  static const Color accentGold = Color(0xFFD97706); // Accent gold
+  static const Color textPrimary = Color(0xFF1E293B); // Dark slate text
+  static const Color textSecondary = Color(0xFF64748B); // Muted slate text
+  static const Color surfaceBg =
+      Color(0xFFF8FAFC); // Clean neutral light background
   static const Color cardBg = Colors.white;
 
   static ThemeData get lightTheme {
@@ -56,4 +63,3 @@ class AppTheme {
     );
   }
 }
-

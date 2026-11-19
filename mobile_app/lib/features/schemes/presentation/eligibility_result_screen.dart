@@ -63,7 +63,8 @@ class EligibilityResultScreen extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline, color: Colors.amber.shade900, size: 22),
+                  Icon(Icons.info_outline,
+                      color: Colors.amber.shade900, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -94,7 +95,8 @@ class EligibilityResultScreen extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
@@ -117,7 +119,8 @@ class EligibilityResultScreen extends StatelessWidget {
               elevation: 2,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: statusColor.withValues(alpha: 0.4), width: 1.5),
+                side: BorderSide(
+                    color: statusColor.withValues(alpha: 0.4), width: 1.5),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -141,7 +144,8 @@ class EligibilityResultScreen extends StatelessWidget {
                       children: [
                         const Text(
                           'Criteria Match Percentage:',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                         Text(
                           '${assessment.criteriaMatchPercentage.toInt()}%',
@@ -157,7 +161,8 @@ class EligibilityResultScreen extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: LinearProgressIndicator(
-                        value: (assessment.criteriaMatchPercentage / 100).clamp(0.0, 1.0),
+                        value: (assessment.criteriaMatchPercentage / 100)
+                            .clamp(0.0, 1.0),
                         minHeight: 8,
                         backgroundColor: Colors.grey.shade200,
                         valueColor: AlwaysStoppedAnimation<Color>(statusColor),
@@ -172,7 +177,8 @@ class EligibilityResultScreen extends StatelessWidget {
                       ),
                       child: Text(
                         assessment.scoreInterpretation,
-                        style: const TextStyle(fontSize: 11, color: Colors.black87, height: 1.3),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black87, height: 1.3),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -180,9 +186,12 @@ class EligibilityResultScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildCountBadge('Satisfied', assessment.satisfiedCount, AppTheme.accentGreen),
-                        _buildCountBadge('Not Satisfied', assessment.notSatisfiedCount, Colors.red.shade700),
-                        _buildCountBadge('Unknown', assessment.unknownCount, Colors.orange.shade800),
+                        _buildCountBadge('Satisfied', assessment.satisfiedCount,
+                            AppTheme.accentGreen),
+                        _buildCountBadge('Not Satisfied',
+                            assessment.notSatisfiedCount, Colors.red.shade700),
+                        _buildCountBadge('Unknown', assessment.unknownCount,
+                            Colors.orange.shade800),
                       ],
                     ),
                   ],
@@ -197,7 +206,8 @@ class EligibilityResultScreen extends StatelessWidget {
               color: Colors.blue.shade50.withValues(alpha: 0.6),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.4)),
+                side: BorderSide(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.4)),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -206,7 +216,8 @@ class EligibilityResultScreen extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.psychology, color: AppTheme.primaryBlue, size: 24),
+                        const Icon(Icons.psychology,
+                            color: AppTheme.primaryBlue, size: 24),
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Column(
@@ -222,7 +233,8 @@ class EligibilityResultScreen extends StatelessWidget {
                               ),
                               Text(
                                 'Get personalized guidance, document cross-checks, and multilingual next steps.',
-                                style: TextStyle(fontSize: 12, color: Colors.black54),
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.black54),
                               ),
                             ],
                           ),
@@ -250,8 +262,10 @@ class EligibilityResultScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
-                      icon: const Icon(Icons.assignment_turned_in_outlined, size: 16),
-                      label: const Text('Prepare Application & Interactive Checklist'),
+                      icon: const Icon(Icons.assignment_turned_in_outlined,
+                          size: 16),
+                      label: const Text(
+                          'Prepare Application & Interactive Checklist'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.primaryBlue,
                         side: const BorderSide(color: AppTheme.primaryBlue),
@@ -305,7 +319,8 @@ class EligibilityResultScreen extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         'Provide these profile fields for an accurate assessment: ${assessment.missingFields.join(", ")}.',
-                        style: const TextStyle(fontSize: 12, color: Colors.black87),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.black87),
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
@@ -313,7 +328,8 @@ class EligibilityResultScreen extends StatelessWidget {
                         label: const Text('Update Profile Now'),
                         onPressed: () {
                           Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+                            MaterialPageRoute(
+                                builder: (_) => const ProfileSetupScreen()),
                           );
                         },
                       ),
@@ -330,7 +346,8 @@ class EligibilityResultScreen extends StatelessWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            ...assessment.conditionsBreakdown.map((cond) => _buildConditionCard(cond)),
+            ...assessment.conditionsBreakdown
+                .map((cond) => _buildConditionCard(cond)),
 
             const SizedBox(height: 16),
 
@@ -339,7 +356,8 @@ class EligibilityResultScreen extends StatelessWidget {
               elevation: 1,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                side: BorderSide(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -352,7 +370,8 @@ class EligibilityResultScreen extends StatelessWidget {
                         SizedBox(width: 8),
                         Text(
                           'Official Government Portal',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -386,9 +405,12 @@ class EligibilityResultScreen extends StatelessWidget {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () {
-                        Clipboard.setData(ClipboardData(text: assessment.officialApplicationUrl));
+                        Clipboard.setData(ClipboardData(
+                            text: assessment.officialApplicationUrl));
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Official URL copied to clipboard!')),
+                          const SnackBar(
+                              content:
+                                  Text('Official URL copied to clipboard!')),
                         );
                       },
                     ),
@@ -481,7 +503,8 @@ class EligibilityResultScreen extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: cardColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
@@ -515,7 +538,9 @@ class EligibilityResultScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: cond.actualValue != null ? Colors.black87 : Colors.orange.shade800,
+                    color: cond.actualValue != null
+                        ? Colors.black87
+                        : Colors.orange.shade800,
                   ),
                 ),
               ],
@@ -526,4 +551,3 @@ class EligibilityResultScreen extends StatelessWidget {
     );
   }
 }
-

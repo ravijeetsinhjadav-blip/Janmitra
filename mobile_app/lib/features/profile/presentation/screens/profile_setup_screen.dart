@@ -89,14 +89,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         _selectedState = p.state;
       }
       _districtController.text = p.district;
-      _residenceType = p.residenceType.toLowerCase() == 'urban' ? 'urban' : 'rural';
+      _residenceType =
+          p.residenceType.toLowerCase() == 'urban' ? 'urban' : 'rural';
       if (p.annualFamilyIncome != null) {
         _incomeController.text = p.annualFamilyIncome!.toStringAsFixed(0);
       }
       if (p.occupation != null) {
         _occupationController.text = p.occupation!;
       }
-      if (p.educationLevel != null && _educationLevels.contains(p.educationLevel)) {
+      if (p.educationLevel != null &&
+          _educationLevels.contains(p.educationLevel)) {
         _selectedEducation = p.educationLevel;
       }
     }
@@ -113,9 +115,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   Future<void> _selectDateOfBirth() async {
-    final DateTime initialDate = DateTime.now().subtract(const Duration(days: 365 * 25));
+    final DateTime initialDate =
+        DateTime.now().subtract(const Duration(days: 365 * 25));
     final DateTime firstDate = DateTime(1930);
-    final DateTime lastDate = DateTime.now().subtract(const Duration(days: 365 * 10));
+    final DateTime lastDate =
+        DateTime.now().subtract(const Duration(days: 365 * 10));
 
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -156,7 +160,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         district: _districtController.text.trim(),
         residenceType: _residenceType,
         annualFamilyIncome: income,
-        occupation: _occupationController.text.trim().isEmpty ? null : _occupationController.text.trim(),
+        occupation: _occupationController.text.trim().isEmpty
+            ? null
+            : _occupationController.text.trim(),
         educationLevel: _selectedEducation,
       );
 
@@ -171,7 +177,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ),
       );
 
-      if (widget.isInitialSetup) {
+      if (widget.isInitialSetup || !Navigator.of(context).canPop()) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
           (route) => false,
@@ -196,7 +202,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isInitialSetup ? 'Complete Citizen Profile' : 'Edit Citizen Profile'),
+        title: Text(widget.isInitialSetup
+            ? 'Complete Citizen Profile'
+            : 'Edit Citizen Profile'),
         automaticallyImplyLeading: !widget.isInitialSetup,
       ),
       body: SingleChildScrollView(
@@ -216,7 +224,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.person_pin_rounded, color: Colors.blue.shade800, size: 28),
+                      Icon(Icons.person_pin_rounded,
+                          color: Colors.blue.shade800, size: 28),
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
@@ -237,8 +246,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   prefixIcon: Icon(Icons.person_outline),
                   border: OutlineInputBorder(),
                 ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty ? 'Full name is required' : null,
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? 'Full name is required'
+                    : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -251,8 +261,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   prefixIcon: Icon(Icons.calendar_today_outlined),
                   border: OutlineInputBorder(),
                 ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty ? 'Date of birth is required' : null,
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? 'Date of birth is required'
+                    : null,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -280,8 +291,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   prefixIcon: Icon(Icons.location_city_outlined),
                   border: OutlineInputBorder(),
                 ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty ? 'District is required' : null,
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? 'District is required'
+                    : null,
               ),
               const SizedBox(height: 16),
               const Text(
@@ -310,7 +322,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               const Divider(height: 32),
               const Text(
                 'Optional Demographic Details',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.black87),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -359,7 +374,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.lock_outline, color: Colors.green.shade800, size: 20),
+                    Icon(Icons.lock_outline,
+                        color: Colors.green.shade800, size: 20),
                     const SizedBox(width: 10),
                     const Expanded(
                       child: Text(
@@ -396,11 +412,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
                     : Text(
-                        widget.isInitialSetup ? 'Complete Setup & Enter' : 'Save Changes',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        widget.isInitialSetup
+                            ? 'Complete Setup & Enter'
+                            : 'Save Changes',
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),
               const SizedBox(height: 24),

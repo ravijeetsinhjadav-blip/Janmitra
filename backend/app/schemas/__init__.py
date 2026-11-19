@@ -1,11 +1,15 @@
 from app.schemas.auth import (
-    SendOTPRequest,
-    SendOTPResponse,
-    VerifyOTPRequest,
+    RegisterRequest,
+    LoginRequest,
+    SetCredentialsRequest,
     TokenResponse,
     RefreshTokenRequest,
     LogoutRequest,
     MessageResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
 )
 from app.schemas.user import (
     UserProfileBase,
@@ -18,13 +22,17 @@ from app.schemas.user import (
 )
 
 __all__ = [
-    "SendOTPRequest",
-    "SendOTPResponse",
-    "VerifyOTPRequest",
+    "RegisterRequest",
+    "LoginRequest",
+    "SetCredentialsRequest",
     "TokenResponse",
     "RefreshTokenRequest",
     "LogoutRequest",
     "MessageResponse",
+    "ForgotPasswordRequest",
+    "ForgotPasswordResponse",
+    "ResetPasswordRequest",
+    "ResetPasswordResponse",
     "UserProfileBase",
     "UserProfileCreate",
     "UserProfileUpdate",
