@@ -1,6 +1,6 @@
 class ApiEndpoints {
-  // Base backend URL: defaults to 127.0.0.1 for desktop/web and 10.0.2.2 for Android emulator
-  static String baseUrl = 'http://127.0.0.1:8000';
+  // Global Live Public HTTPS URL (Cloudflare Tunnel - Works 100km+ away on 4G/5G without cables)
+  static String baseUrl = 'https://slightly-revision-reproduce-accepts.trycloudflare.com';
 
   // System endpoints
   static const String health = '/health';
