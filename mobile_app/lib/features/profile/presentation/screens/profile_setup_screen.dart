@@ -201,14 +201,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.surfaceBg,
       appBar: AppBar(
-        title: Text(widget.isInitialSetup
-            ? 'Complete Citizen Profile'
-            : 'Edit Citizen Profile'),
+        backgroundColor: AppTheme.primaryNavy,
+        elevation: 0,
+        title: Text(
+          widget.isInitialSetup
+              ? 'Complete Citizen Profile'
+              : 'Edit Citizen Profile',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         automaticallyImplyLeading: !widget.isInitialSetup,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
         child: Form(
           key: _formKey,
           child: Column(
@@ -218,181 +224,217 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade200),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.person_pin_rounded,
-                          color: Colors.blue.shade800, size: 28),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryBlue.withAlpha(25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.person_pin_rounded,
+                            color: AppTheme.primaryBlue, size: 24),
+                      ),
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Welcome to JanMitra Assist! Please set up your basic profile so we can deliver tailored government scheme guidance.',
-                          style: TextStyle(fontSize: 13, height: 1.4),
+                          'Welcome to JanMitra Assist! Complete your profile to unlock instant AI eligibility for 7+ government schemes.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            height: 1.35,
+                            color: AppTheme.primaryDark,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
               ],
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name *',
-                  hintText: 'e.g. Ramesh Kumar',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (val) => val == null || val.trim().isEmpty
-                    ? 'Full name is required'
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _dobController,
-                readOnly: true,
-                onTap: _selectDateOfBirth,
-                decoration: const InputDecoration(
-                  labelText: 'Date of Birth (YYYY-MM-DD) *',
-                  hintText: 'Tap to select your date of birth',
-                  prefixIcon: Icon(Icons.calendar_today_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (val) => val == null || val.trim().isEmpty
-                    ? 'Date of birth is required'
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedState,
-                decoration: const InputDecoration(
-                  labelText: 'State of Residence *',
-                  prefixIcon: Icon(Icons.map_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                items: _indianStates.map((s) {
-                  return DropdownMenuItem(value: s, child: Text(s));
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedState = val);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _districtController,
-                decoration: const InputDecoration(
-                  labelText: 'District *',
-                  hintText: 'e.g. Pune, Nagpur, Jaipur',
-                  prefixIcon: Icon(Icons.location_city_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (val) => val == null || val.trim().isEmpty
-                    ? 'District is required'
-                    : null,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Residence Type *',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 6),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment<String>(
-                    value: 'rural',
-                    label: Text('Rural'),
-                    icon: Icon(Icons.holiday_village_outlined),
+
+              // Section 1: Basic Identity
+              _buildSectionCard(
+                title: 'Primary Citizen Identity',
+                icon: Icons.badge_outlined,
+                children: [
+                  TextFormField(
+                    controller: _fullNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name *',
+                      hintText: 'e.g. Ramesh Kumar',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Full name is required'
+                        : null,
                   ),
-                  ButtonSegment<String>(
-                    value: 'urban',
-                    label: Text('Urban'),
-                    icon: Icon(Icons.location_city_outlined),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _dobController,
+                    readOnly: true,
+                    onTap: _selectDateOfBirth,
+                    decoration: const InputDecoration(
+                      labelText: 'Date of Birth (YYYY-MM-DD) *',
+                      hintText: 'Tap to select your date of birth',
+                      prefixIcon: Icon(Icons.calendar_today_outlined),
+                      suffixIcon: Icon(Icons.arrow_drop_down),
+                    ),
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'Date of birth is required'
+                        : null,
                   ),
                 ],
-                selected: {_residenceType},
-                onSelectionChanged: (Set<String> newSelection) {
-                  setState(() => _residenceType = newSelection.first);
-                },
               ),
-              const Divider(height: 32),
-              const Text(
-                'Optional Demographic Details',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Colors.black87),
+              const SizedBox(height: 14),
+
+              // Section 2: Location & Residence
+              _buildSectionCard(
+                title: 'Geographic Location',
+                icon: Icons.location_on_outlined,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedState,
+                    decoration: const InputDecoration(
+                      labelText: 'State of Residence *',
+                      prefixIcon: Icon(Icons.map_outlined),
+                    ),
+                    items: _indianStates.map((s) {
+                      return DropdownMenuItem(value: s, child: Text(s));
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedState = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _districtController,
+                    decoration: const InputDecoration(
+                      labelText: 'District *',
+                      hintText: 'e.g. Pune, Nagpur, Jaipur',
+                      prefixIcon: Icon(Icons.location_city_outlined),
+                    ),
+                    validator: (val) => val == null || val.trim().isEmpty
+                        ? 'District is required'
+                        : null,
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Residence Type *',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppTheme.primaryDark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment<String>(
+                        value: 'rural',
+                        label: Text('Rural (ग्रामीण)'),
+                        icon: Icon(Icons.holiday_village_outlined),
+                      ),
+                      ButtonSegment<String>(
+                        value: 'urban',
+                        label: Text('Urban (शहरी)'),
+                        icon: Icon(Icons.location_city_outlined),
+                      ),
+                    ],
+                    selected: {_residenceType},
+                    onSelectionChanged: (Set<String> newSelection) {
+                      setState(() => _residenceType = newSelection.first);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _incomeController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Annual Family Income (INR)',
-                  hintText: 'e.g. 180000',
-                  prefixIcon: Icon(Icons.currency_rupee),
-                  border: OutlineInputBorder(),
-                ),
+              const SizedBox(height: 14),
+
+              // Section 3: Socio-Economic Profile
+              _buildSectionCard(
+                title: 'Socio-Economic & Scheme Profiling',
+                icon: Icons.work_outline,
+                children: [
+                  TextFormField(
+                    controller: _incomeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Annual Family Income (INR)',
+                      hintText: 'e.g. 180000',
+                      prefixIcon: Icon(Icons.currency_rupee),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _occupationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Occupation',
+                      hintText: 'e.g. Farmer, Student, Artisan, Self-employed',
+                      prefixIcon: Icon(Icons.work_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedEducation,
+                    decoration: const InputDecoration(
+                      labelText: 'Education Level',
+                      prefixIcon: Icon(Icons.school_outlined),
+                    ),
+                    hint: const Text('Select education level'),
+                    items: _educationLevels.map((lvl) {
+                      return DropdownMenuItem(value: lvl, child: Text(lvl));
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() => _selectedEducation = val);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _occupationController,
-                decoration: const InputDecoration(
-                  labelText: 'Occupation',
-                  hintText: 'e.g. Farmer, Student, Artisan, Self-employed',
-                  prefixIcon: Icon(Icons.work_outline),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedEducation,
-                decoration: const InputDecoration(
-                  labelText: 'Education Level',
-                  prefixIcon: Icon(Icons.school_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                hint: const Text('Select education level'),
-                items: _educationLevels.map((lvl) {
-                  return DropdownMenuItem(value: lvl, child: Text(lvl));
-                }).toList(),
-                onChanged: (val) {
-                  setState(() => _selectedEducation = val);
-                },
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
+
+              // Privacy Assurance Box
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.shade200),
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    Icon(Icons.lock_outline,
-                        color: Colors.green.shade800, size: 20),
-                    const SizedBox(width: 10),
-                    const Expanded(
+                    Icon(Icons.verified_user_outlined,
+                        color: Color(0xFF059669), size: 22),
+                    SizedBox(width: 10),
+                    Expanded(
                       child: Text(
-                        'Aadhaar Privacy Notice: Aadhaar number is NOT collected or stored in JanMitra Assist.',
-                        style: TextStyle(fontSize: 12, color: Colors.black87),
+                        'Aadhaar Privacy Commitment: Aadhaar number is NOT collected or stored in JanMitra Assist database.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF065F46),
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+
               if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.red.shade200),
                   ),
                   child: Text(
@@ -402,31 +444,78 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 ),
               ],
               const SizedBox(height: 24),
+
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleSaveProfile,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryBlue,
+                  backgroundColor: AppTheme.primaryNavy,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 2,
                 ),
                 child: _isLoading
                     ? const SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : Text(
                         widget.isInitialSetup
-                            ? 'Complete Setup & Enter'
-                            : 'Save Changes',
+                            ? 'Complete Setup & Explore Schemes'
+                            : 'Save Citizen Profile',
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
               ),
               const SizedBox(height: 24),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: AppTheme.primaryBlue),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primaryNavy,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 20, color: AppTheme.borderColor),
+          ...children,
+        ],
       ),
     );
   }

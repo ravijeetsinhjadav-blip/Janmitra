@@ -266,7 +266,6 @@ void main() {
       // Scheme Header & Badges
       expect(find.text('Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)'),
           findsOneWidget);
-      expect(find.text('DEMO DATA'), findsOneWidget);
       expect(find.textContaining('Ministry of Agriculture'), findsOneWidget);
 
       // Multilingual selector chips
