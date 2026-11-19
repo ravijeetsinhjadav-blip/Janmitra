@@ -52,14 +52,16 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
   String? _errorMessage;
 
   final List<Map<String, String>> _documentTypes = [
-    {'value': 'income_certificate', 'label': 'Income Certificate'},
-    {'value': 'caste_certificate', 'label': 'Caste Certificate'},
-    {'value': 'domicile_certificate', 'label': 'Domicile Certificate'},
-    {'value': 'ration_card', 'label': 'Ration Card'},
-    {'value': 'voter_id', 'label': 'Voter ID / Photo ID'},
-    {'value': 'land_record', 'label': 'Land Record (7/12)'},
-    {'value': 'bank_passbook', 'label': 'Bank Passbook'},
-    {'value': 'other', 'label': 'Other Document'},
+    {'value': 'income_certificate', 'label': 'Income Certificate (आय प्रमाण पत्र)'},
+    {'value': 'caste_certificate', 'label': 'Caste Certificate (जाति प्रमाण पत्र)'},
+    {'value': 'domicile_certificate', 'label': 'Domicile Certificate (निवास प्रमाण पत्र)'},
+    {'value': 'ration_card', 'label': 'Ration Card (राशन कार्ड)'},
+    {'value': 'aadhaar_card', 'label': 'Aadhaar Card (आधार कार्ड)'},
+    {'value': 'pan_card', 'label': 'PAN Card (पैन कार्ड)'},
+    {'value': 'voter_id', 'label': 'Voter ID (मतदाता पहचान पत्र)'},
+    {'value': 'land_record', 'label': 'Land Record (7/12 / भूलेख)'},
+    {'value': 'bank_passbook', 'label': 'Bank Passbook (बैंक पासबुक)'},
+    {'value': 'other', 'label': 'Other Official Document'},
   ];
 
   @override
@@ -154,6 +156,22 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
         filename: _fileName!,
         documentType: _selectedType,
       );
+
+      // Verify OCR outcome: If OCR failed (e.g. invalid document or unmatched type), reject immediately
+      if (result.ocrStatus == DocumentProcessingStatus.ocrFailed) {
+        // Automatically purge the invalid document from vault
+        try {
+          await _documentService.deleteDocument(result.id);
+        } catch (_) {}
+
+        if (!mounted) return;
+        setState(() {
+          _isUploading = false;
+          _errorMessage = result.ocrErrorMessage ??
+              'Document verification failed: Uploaded image does not match the selected document type. Please upload a genuine, clear document.';
+        });
+        return;
+      }
 
       if (!mounted) return;
       widget.onUploadSuccess?.call();

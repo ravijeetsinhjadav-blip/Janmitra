@@ -48,6 +48,11 @@ backups/documents/*
 !backups/documents/.gitkeep
 
 # Uploaded Citizen Documents Storage (Local disk storage)
+storage/documents/*
+!storage/documents/.gitkeep
+
+# Cloudflare tunnel binary
+cloudflared.exe
 storage/
 backend/storage/
 backend/storage/*

@@ -8,12 +8,14 @@ from fastapi import (
     UploadFile,
     Response,
     status,
+    HTTPException,
 )
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_active_citizen
 from app.models.user import User
+from app.models.document import DocumentProcessingStatus
 from app.schemas.document import (
     DocumentUploadResponse,
     DocumentMetadataResponse,
@@ -21,6 +23,7 @@ from app.schemas.document import (
     SchemeDocumentChecklistResponse,
 )
 from app.services.document_service import document_service
+from app.services.storage_service import storage_service
 from app.services.subscription_service import SubscriptionService
 
 router = APIRouter()

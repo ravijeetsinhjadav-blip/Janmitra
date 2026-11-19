@@ -186,7 +186,7 @@ void main() {
 
       expect(find.text('Upload to Document Vault'), findsOneWidget);
       expect(find.text('Document Classification'), findsOneWidget);
-      expect(find.text('Income Certificate'), findsOneWidget);
+      expect(find.textContaining('Income Certificate'), findsOneWidget);
       expect(find.text('Camera'), findsOneWidget);
       expect(find.text('Gallery'), findsOneWidget);
       expect(find.text('File'), findsOneWidget);
