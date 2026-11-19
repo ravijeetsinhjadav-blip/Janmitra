@@ -131,12 +131,37 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
           });
         } else {
           setState(() => _errorMessage =
-              'Could not read file bytes. Please try another file.');
+              'Could not read file bytes. Please try another file or use the Viva Demo sample document.');
         }
       }
     } catch (e) {
       setState(() => _errorMessage = 'Failed to select file: $e');
     }
+  }
+
+  void _loadSampleDocument() {
+    setState(() => _errorMessage = null);
+    // Standard valid PDF header & structure conforming to magic bytes validation (%PDF-1.4)
+    const samplePdfString = "%PDF-1.4\n"
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+        "trailer\n<< /Root 1 0 R >>\n%%EOF";
+    final bytes = Uint8List.fromList(samplePdfString.codeUnits);
+    final extMap = {
+      'income_certificate': 'income_certificate_sample.pdf',
+      'caste_certificate': 'caste_certificate_sample.pdf',
+      'domicile_certificate': 'domicile_certificate_sample.pdf',
+      'ration_card': 'ration_card_sample.pdf',
+      'voter_id': 'voter_id_sample.pdf',
+      'land_record': 'land_record_sample.pdf',
+      'bank_passbook': 'bank_passbook_sample.pdf',
+    };
+    final name = extMap[_selectedType] ?? 'official_document_sample.pdf';
+    setState(() {
+      _fileBytes = bytes;
+      _fileName = name;
+    });
   }
 
   Future<void> _handleUpload() async {
@@ -282,6 +307,18 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.auto_awesome,
+                color: AppTheme.primaryBlue, size: 18),
+            label: const Text('⚡ Use Sample Document (Viva Demo)'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.primaryBlue,
+              side: const BorderSide(color: AppTheme.primaryBlue, width: 1.2),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            onPressed: _isUploading ? null : _loadSampleDocument,
           ),
           const SizedBox(height: 14),
           // Selected File Indicator
