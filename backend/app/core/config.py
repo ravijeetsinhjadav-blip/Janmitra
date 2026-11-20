@@ -178,6 +178,9 @@ class Settings(BaseSettings):
             elif url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql+psycopg://", 1)
             return url
+        # If running in cloud container (Render / Docker) without external DATABASE_URL, fall back to SQLite
+        if os.getenv("RENDER") or os.getenv("PORT"):
+            return "sqlite:////app/backend/janmitra.db"
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
