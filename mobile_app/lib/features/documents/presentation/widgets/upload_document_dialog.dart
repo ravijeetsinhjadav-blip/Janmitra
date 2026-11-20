@@ -52,9 +52,26 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
   String? _errorMessage;
 
   final List<Map<String, String>> _documentTypes = [
-    {'value': 'income_certificate', 'label': 'Income Certificate (आय प्रमाण पत्र)'},
-    {'value': 'caste_certificate', 'label': 'Caste Certificate (जाति प्रमाण पत्र)'},
-    {'value': 'domicile_certificate', 'label': 'Domicile Certificate (निवास प्रमाण पत्र)'},
+    {'value': 'income_certificate', 'label': 'Income Certificate'},
+    {'value': 'caste_certificate', 'label': 'Caste Certificate'},
+    {'value': 'domicile_certificate', 'label': 'Domicile Certificate'},
+    {'value': 'ration_card', 'label': 'Ration Card'},
+    {'value': 'voter_id', 'label': 'Voter ID / Photo ID'},
+    {'value': 'land_record', 'label': 'Land Record (7/12)'},
+    {'value': 'bank_passbook', 'label': 'Bank Passbook'},
+    {'value': 'other', 'label': 'Other Document'},
+    {
+      'value': 'income_certificate',
+      'label': 'Income Certificate (आय प्रमाण पत्र)'
+    },
+    {
+      'value': 'caste_certificate',
+      'label': 'Caste Certificate (जाति प्रमाण पत्र)'
+    },
+    {
+      'value': 'domicile_certificate',
+      'label': 'Domicile Certificate (निवास प्रमाण पत्र)'
+    },
     {'value': 'ration_card', 'label': 'Ration Card (राशन कार्ड)'},
     {'value': 'aadhaar_card', 'label': 'Aadhaar Card (आधार कार्ड)'},
     {'value': 'pan_card', 'label': 'PAN Card (पैन कार्ड)'},
@@ -131,7 +148,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
           });
         } else {
           setState(() => _errorMessage =
-              'Could not read file bytes. Please try another file or use the Viva Demo sample document.');
+              'Could not read file bytes. Please try another file.');
         }
       }
     } catch (e) {
