@@ -3,19 +3,19 @@ databases:
     databaseName: janmitra
     user: janmitra_user
     plan: free
-    region: singapore
+    region: oregon
     ipAllowList: []
 
 services:
   - type: web
     name: janmitra-backend
     runtime: python
-    region: singapore
+    region: oregon
     plan: free
     branch: master
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -23,5 +23,13 @@ services:
           property: connectionString
       - key: ENVIRONMENT
         value: development
+      - key: DEBUG
+        value: "true"
+      - key: OCR_PROVIDER
+        value: mock
+      - key: AI_PROVIDER
+        value: mock
       - key: JWT_SECRET_KEY
         generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*"

@@ -30,10 +30,9 @@ async def _run_reminder_scheduler_loop():
 async def lifespan(app: FastAPI):
     """Lifespan event handler for application startup and shutdown."""
     logger.info("JanMitra Assist Backend is starting up...")
-    if _is_sqlite:
-        import app.models
-        Base.metadata.create_all(bind=engine)
-        logger.info("Local SQLite database verified with all model tables.")
+    import app.models
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database schema and all model tables verified.")
 
     # Ensure demo schemes and scheme intelligence data are seeded
     try:
