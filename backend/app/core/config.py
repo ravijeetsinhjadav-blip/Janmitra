@@ -177,10 +177,13 @@ class Settings(BaseSettings):
                 url = url.replace("postgresql://", "postgresql+psycopg://", 1)
             elif url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql+psycopg://", 1)
+            # Ensure SSL mode is enabled for cloud PostgreSQL providers (Render / Neon / Supabase)
+            if ("render.com" in url or "neon.tech" in url or "supabase" in url) and "sslmode" not in url:
+                url += ("&" if "?" in url else "?") + "sslmode=require"
             return url
-        # If running in cloud container (Render / Docker) without external DATABASE_URL, fall back to SQLite
+        # If running in cloud container (Render / Docker) without external DATABASE_URL, fall back to SQLite in /tmp
         if os.getenv("RENDER") or os.getenv("PORT"):
-            return "sqlite:////app/backend/janmitra.db"
+            return "sqlite:////tmp/janmitra.db"
         return (
             f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
