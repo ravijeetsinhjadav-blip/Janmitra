@@ -1,6 +1,6 @@
 class ApiEndpoints {
-  // Global Live Public HTTPS URL (Cloudflare Tunnel - Works 100km+ away on 4G/5G without cables)
-  static String baseUrl = 'https://slightly-revision-reproduce-accepts.trycloudflare.com';
+  // Global Live Public HTTPS URL (Render Cloud Production - 24/7 without laptop)
+  static String baseUrl = 'https://janmitra-e8ca.onrender.com';
 
   // System endpoints
   static const String health = '/health';
