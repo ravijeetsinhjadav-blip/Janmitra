@@ -187,12 +187,15 @@ _rapidocr_engine = None
 
 
 def get_rapidocr_engine():
-    """Cached singleton for RapidOCR engine to prevent ONNX session re-initialization."""
+    """Cached singleton for RapidOCR engine with single-thread and memory-safe config."""
     global _rapidocr_engine
     if _rapidocr_engine is None:
         try:
+            import os
+            os.environ["OMP_NUM_THREADS"] = "1"
+            os.environ["OPENBLAS_NUM_THREADS"] = "1"
             from rapidocr_onnxruntime import RapidOCR
-            _rapidocr_engine = RapidOCR()
+            _rapidocr_engine = RapidOCR(use_angle_cls=False)
         except Exception as e:
             logger.error("Failed to initialize RapidOCR engine: %s", e)
     return _rapidocr_engine
@@ -215,10 +218,10 @@ def extract_text_with_rapidocr(file_bytes: bytes) -> Tuple[str, float]:
         if img.mode != "RGB":
             img = img.convert("RGB")
 
-        # Downscale large images (> 1280px) to prevent memory overload on 512MB RAM and accelerate OCR
+        # Downscale large images (> 960px) to prevent memory overload on 512MB RAM and accelerate OCR
         max_dim = max(img.size)
-        if max_dim > 1280:
-            scale = 1280.0 / max_dim
+        if max_dim > 960:
+            scale = 960.0 / max_dim
             new_size = (max(1, int(img.size[0] * scale)), max(1, int(img.size[1] * scale)))
             img = img.resize(new_size, Image.Resampling.BILINEAR)
 
