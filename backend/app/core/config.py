@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # Document Storage Settings (Phase 5)
     DOCUMENT_STORAGE_PATH: str = "storage/documents"
     MAX_DOCUMENT_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
-    ALLOWED_DOCUMENT_EXTENSIONS: str = "pdf,jpg,jpeg,png"
+    ALLOWED_DOCUMENT_EXTENSIONS: str = "pdf,jpg,jpeg,png,webp"
 
     # OCR Pipeline Settings (Phase 5)
     OCR_PROVIDER: str = "google_cloud_vision"  # 'google_cloud_vision' or 'mock'

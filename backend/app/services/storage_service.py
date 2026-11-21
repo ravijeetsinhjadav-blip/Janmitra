@@ -12,6 +12,7 @@ MAGIC_SIGNATURES = {
     "jpg": [b"\xff\xd8\xff"],
     "jpeg": [b"\xff\xd8\xff"],
     "png": [b"\x89PNG\r\n\x1a\n", b"\x89PNG"],
+    "webp": [b"RIFF"],
 }
 
 MIME_TYPE_MAPPING = {
@@ -19,6 +20,7 @@ MIME_TYPE_MAPPING = {
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
     "png": "image/png",
+    "webp": "image/webp",
 }
 
 
@@ -64,22 +66,13 @@ class StorageService:
             )
 
         # 2. Extension check
-        if not filename or "." not in filename:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid filename: missing extension.",
-            )
-
-        raw_ext = filename.rsplit(".", 1)[-1].strip().lower()
+        raw_ext = filename.rsplit(".", 1)[-1].strip().lower() if filename and "." in filename else ""
         allowed = settings.allowed_extensions
-        if raw_ext not in allowed:
+        if raw_ext and raw_ext not in allowed and raw_ext not in ("tmp", "temp", "jpeg", "jpg", "png", "pdf", "webp"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Unsupported file extension '.{raw_ext}'. Allowed formats: {', '.join(allowed)}.",
             )
-
-        # Normalize ext
-        normalized_ext = "jpg" if raw_ext == "jpeg" else raw_ext
 
         # 3. Magic byte signature verification
         is_signature_valid = False
@@ -87,37 +80,53 @@ class StorageService:
         for fmt, sigs in MAGIC_SIGNATURES.items():
             for sig in sigs:
                 if file_bytes.startswith(sig):
-                    is_signature_valid = True
-                    detected_format = fmt
-                    break
+                    if fmt == "webp":
+                        # Verify WEBP magic at offset 8-12
+                        if len(file_bytes) >= 12 and file_bytes[8:12] == b"WEBP":
+                            is_signature_valid = True
+                            detected_format = "webp"
+                            break
+                    else:
+                        is_signature_valid = True
+                        detected_format = fmt
+                        break
             if is_signature_valid:
                 break
+
+        # Fallback inspection via PIL Image for valid image streams
+        if not is_signature_valid:
+            try:
+                import io
+                from PIL import Image
+                with Image.open(io.BytesIO(file_bytes)) as pil_img:
+                    fmt = (pil_img.format or "").lower()
+                    if fmt in ("jpeg", "jpg"):
+                        detected_format = "jpg"
+                        is_signature_valid = True
+                    elif fmt == "png":
+                        detected_format = "png"
+                        is_signature_valid = True
+                    elif fmt == "webp":
+                        detected_format = "webp"
+                        is_signature_valid = True
+            except Exception:
+                pass
 
         if not is_signature_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File content signature validation failed. File is corrupt or spoofed.",
+                detail="File content signature validation failed. Please upload a valid document or photo (PDF, JPG, PNG, WEBP).",
             )
 
-        # Check format compatibility with extension
-        if detected_format in ("jpg", "jpeg") and raw_ext not in ("jpg", "jpeg"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File content (JPEG) does not match the provided file extension.",
-            )
-        if detected_format == "png" and raw_ext != "png":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File content (PNG) does not match the provided file extension.",
-            )
-        if detected_format == "pdf" and raw_ext != "pdf":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File content (PDF) does not match the provided file extension.",
-            )
+        # 3. Extension resolution & auto-normalization
+        raw_ext = ""
+        if filename and "." in filename:
+            raw_ext = filename.rsplit(".", 1)[-1].strip().lower()
 
-        mime_type = MIME_TYPE_MAPPING.get(raw_ext, declared_content_type or "application/octet-stream")
-        return mime_type, raw_ext
+        # If extension is missing, unknown, or mismatched with detected bytes, auto-correct to detected format
+        normalized_ext = "jpg" if detected_format in ("jpg", "jpeg") else detected_format
+        mime_type = MIME_TYPE_MAPPING.get(normalized_ext, declared_content_type or "application/octet-stream")
+        return mime_type, normalized_ext
 
     def sanitize_filename(self, filename: str) -> str:
         """Strip insecure characters and path traversal segments from original filename."""

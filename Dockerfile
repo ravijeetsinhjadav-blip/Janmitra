@@ -32,7 +32,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ENVIRONMENT=development \
     DEBUG=true \
     OCR_PROVIDER=mock \
-    AI_PROVIDER=mock
+    AI_PROVIDER=mock \
+    IS_DOCKER=true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \

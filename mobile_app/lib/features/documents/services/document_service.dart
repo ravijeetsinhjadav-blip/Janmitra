@@ -53,6 +53,8 @@ class DocumentService {
       mediaType = MediaType('image', 'png');
     } else if (ext == 'jpg' || ext == 'jpeg') {
       mediaType = MediaType('image', 'jpeg');
+    } else if (ext == 'webp') {
+      mediaType = MediaType('image', 'webp');
     }
 
     final multipartFile = http.MultipartFile.fromBytes(
@@ -66,7 +68,21 @@ class DocumentService {
     try {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      final body = jsonDecode(response.body);
+
+      Map<String, dynamic> body;
+      try {
+        body = jsonDecode(response.body) as Map<String, dynamic>;
+      } on FormatException {
+        if (response.statusCode == 413) {
+          throw Exception('File size is too large. Please upload an image under 10 MB.');
+        } else if (response.statusCode >= 500) {
+          throw Exception('Cloud server is temporarily busy. Please retry in a few moments.');
+        } else {
+          throw Exception('Server response format unexpected (HTTP ${response.statusCode}). Please retry.');
+        }
+      } catch (_) {
+        throw Exception('Server response error (HTTP ${response.statusCode}). Please retry.');
+      }
 
       if (response.statusCode == 201) {
         final docJson = body['document'] as Map<String, dynamic>;

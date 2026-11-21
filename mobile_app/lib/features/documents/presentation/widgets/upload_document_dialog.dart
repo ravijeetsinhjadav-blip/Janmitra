@@ -75,13 +75,19 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     try {
       final photo = await _picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 85,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 80,
       );
       if (photo != null) {
         final bytes = await photo.readAsBytes();
+        String name = photo.name;
+        if (!name.contains('.')) {
+          name = '$name.jpg';
+        }
         setState(() {
           _fileBytes = bytes;
-          _fileName = photo.name;
+          _fileName = name;
         });
       }
     } catch (e) {
@@ -94,13 +100,19 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     try {
       final image = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 85,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 80,
       );
       if (image != null) {
         final bytes = await image.readAsBytes();
+        String name = image.name;
+        if (!name.contains('.')) {
+          name = '$name.jpg';
+        }
         setState(() {
           _fileBytes = bytes;
-          _fileName = image.name;
+          _fileName = name;
         });
       }
     } catch (e) {
@@ -113,7 +125,7 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
         withData: true,
       );
       if (result != null && result.files.isNotEmpty) {
@@ -125,9 +137,13 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
           } catch (_) {}
         }
         if (bytes != null && bytes.isNotEmpty) {
+          String name = file.name;
+          if (!name.contains('.')) {
+            name = '$name.jpg';
+          }
           setState(() {
             _fileBytes = bytes;
-            _fileName = file.name;
+            _fileName = name;
           });
         } else {
           setState(() => _errorMessage =
@@ -178,9 +194,13 @@ class _UploadDocumentDialogState extends State<UploadDocumentDialog> {
       Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
+      String cleanErr = e
+          .toString()
+          .replaceFirst('FormatException: ', '')
+          .replaceFirst('Exception: ', '');
       setState(() {
         _isUploading = false;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = cleanErr;
       });
     }
   }

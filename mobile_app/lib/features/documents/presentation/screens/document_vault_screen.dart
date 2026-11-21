@@ -65,7 +65,7 @@ class _DocumentVaultScreenState extends State<DocumentVaultScreen> {
   Future<void> _openUploadDialog() async {
     final uploaded = await UploadDocumentDialog.show(
       context,
-      initialDocumentType: _selectedFilter != 'all' ? _selectedFilter : null,
+      initialDocumentType: _selectedFilter != 'all' ? _selectedFilter : 'aadhaar_card',
       onUploadSuccess: () {},
     );
 

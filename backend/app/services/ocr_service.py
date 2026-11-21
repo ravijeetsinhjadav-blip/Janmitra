@@ -72,11 +72,12 @@ DOCUMENT_RULES: Dict[str, Dict[str, Any]] = {
             "aadhaar", "aadhar", "adharn", "adhaar", "uidai", "unique identification", "government of india",
             "govt of india", "authority of india", "आधार", "मेरा आधार", "मेरी पहचान", "भारत सरकार",
             "भारतीय विशिष्ट पहचान प्राधिकरण", "વિશિષ્ટ ઓળખ", "ભારત સરકાર", "મારું આધાર", "આધાર",
-            "vid", "enrollment", "enrolment", "male", "female", "transgender", "पुरुष", "महिला",
+            "pvc", "pvc card", "plastic", "vid", "enrollment", "enrolment", "enrolment no",
+            "male", "female", "transgender", "पुरुष", "महिला",
             "પુરુષ", "સ્ત્રી", "dob", "date of birth", "year of birth", "yob", "जन्म तारीख", "जन्म तिथि",
             "जन्म वर्ष", "janm", "father", "husband", "mother", "c/o", "s/o", "w/o", "d/o", "care of",
             "son of", "wife of", "daughter of", "address", "pata", "सरनामું", "resident", "निवासी",
-            "help@uidai.gov.in", "1947", "myaadhaar", "uidai.gov.in"
+            "help@uidai.gov.in", "1947", "myaadhaar", "uidai.gov.in", "issue date", "print date", "download date"
         ],
         "patterns": [
             r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b",
@@ -182,10 +183,24 @@ def validate_document_content(extracted_text: str, document_type: str) -> Tuple[
     )
 
 
+_rapidocr_engine = None
+
+
+def get_rapidocr_engine():
+    """Cached singleton for RapidOCR engine to prevent ONNX session re-initialization."""
+    global _rapidocr_engine
+    if _rapidocr_engine is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _rapidocr_engine = RapidOCR()
+        except Exception as e:
+            logger.error("Failed to initialize RapidOCR engine: %s", e)
+    return _rapidocr_engine
+
+
 def extract_text_with_rapidocr(file_bytes: bytes) -> Tuple[str, float]:
-    """Extract real text and confidence using local RapidOCR engine with auto-orientation and downscaling."""
+    """Extract real text and confidence using local RapidOCR engine with auto-orientation and memory-safe downscaling."""
     try:
-        from rapidocr_onnxruntime import RapidOCR
         from PIL import Image, ImageOps, ImageEnhance
         import numpy as np
 
@@ -200,18 +215,21 @@ def extract_text_with_rapidocr(file_bytes: bytes) -> Tuple[str, float]:
         if img.mode != "RGB":
             img = img.convert("RGB")
 
-        # Downscale large images (> 1800px) to prevent memory overload and speed up recognition
+        # Downscale large images (> 1280px) to prevent memory overload on 512MB RAM and accelerate OCR
         max_dim = max(img.size)
-        if max_dim > 1800:
-            scale = 1800 / max_dim
-            new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
-            img = img.resize(new_size, Image.Resampling.LANCZOS)
+        if max_dim > 1280:
+            scale = 1280.0 / max_dim
+            new_size = (max(1, int(img.size[0] * scale)), max(1, int(img.size[1] * scale)))
+            img = img.resize(new_size, Image.Resampling.BILINEAR)
 
         img_np = np.array(img)
-        engine = RapidOCR()
+        engine = get_rapidocr_engine()
+        if engine is None:
+            return "", 0.0
+
         results, _ = engine(img_np)
 
-        # If no text detected on raw camera image, try with contrast enhancement
+        # If no text detected on raw camera image (e.g. plastic card glare/lighting), try with enhanced contrast
         if not results:
             try:
                 enhancer = ImageEnhance.Contrast(img)
@@ -542,14 +560,14 @@ class GoogleCloudVisionAdapter(BaseOCRAdapter):
             )
 
         norm_mime = (mime_type or "").lower().strip()
-        if norm_mime not in ["application/pdf", "image/jpeg", "image/jpg", "image/png"]:
+        if norm_mime not in ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp"]:
             return OCRResult(
                 extracted_text="",
                 confidence=0.0,
                 metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "unsupported_format"},
                 status=DocumentProcessingStatus.OCR_FAILED,
                 manual_review_required=True,
-                error_message=f"Unsupported document format '{mime_type}'. Supported formats: PDF, JPEG, PNG.",
+                error_message=f"Unsupported document format '{mime_type}'. Supported formats: PDF, JPEG, PNG, WEBP.",
                 completed_at=now,
             )
 
@@ -763,7 +781,7 @@ class MockOCRAdapter(BaseOCRAdapter):
 
         if norm_mime == "application/pdf":
             real_text, real_conf = extract_text_from_pdf(file_bytes)
-        elif norm_mime in ["image/jpeg", "image/jpg", "image/png"]:
+        elif norm_mime in ["image/jpeg", "image/jpg", "image/png", "image/webp"]:
             real_text, real_conf = extract_text_with_rapidocr(file_bytes)
 
         # 2. If real text was detected in the user's uploaded file:
@@ -879,7 +897,7 @@ class MockOCRAdapter(BaseOCRAdapter):
             or "fake" in name_lower
         )
 
-        if is_random_test or len(file_bytes) < 15000:
+        if is_random_test or len(file_bytes) < 5000:
             rejection_msg = (
                 f"Uploaded image does not appear to be a valid {title}. "
                 "No readable document text or official certificate markers were detected. "
@@ -965,12 +983,24 @@ class OCRService:
         # 1. Production Mode Constraints
         if self.is_production():
             if not self._should_use_gcv():
-                logger.info("Cloud Vision credentials not configured; utilizing local RapidOCR engine.")
-                return self._mock_adapter.extract_text(
-                    file_bytes=file_bytes,
-                    mime_type=mime_type,
-                    document_type=document_type,
-                    filename=filename,
+                is_render_or_container = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID") or os.getenv("IS_DOCKER"))
+                if is_render_or_container or getattr(settings, "USE_RAPIDOCR_FALLBACK", False):
+                    logger.info("Cloud Vision credentials not configured on Render/Docker; utilizing local RapidOCR engine.")
+                    return self._mock_adapter.extract_text(
+                        file_bytes=file_bytes,
+                        mime_type=mime_type,
+                        document_type=document_type,
+                        filename=filename,
+                    )
+                logger.error("Production mode violation: Google Cloud Vision credentials missing.")
+                return OCRResult(
+                    extracted_text="",
+                    confidence=0.0,
+                    metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "missing_credentials"},
+                    status=DocumentProcessingStatus.OCR_FAILED,
+                    manual_review_required=True,
+                    error_message="Production OCR provider credentials not configured.",
+                    completed_at=now,
                 )
 
             logger.info("Processing document '%s' via Google Cloud Vision API in production", filename)
