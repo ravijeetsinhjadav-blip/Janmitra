@@ -193,10 +193,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
       // Fetch current device GPS coordinates
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 10),
-        ),
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 10),
       );
 
       String? detectedDistrict;
