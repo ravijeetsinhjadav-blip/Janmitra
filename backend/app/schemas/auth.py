@@ -54,6 +54,7 @@ class TokenResponse(BaseModel):
     is_new_user: bool = False
     user_id: str
     email: Optional[str] = None
+    mobile_number: Optional[str] = None
     role: str
     profile_completed: bool = False
     csrf_token: Optional[str] = None

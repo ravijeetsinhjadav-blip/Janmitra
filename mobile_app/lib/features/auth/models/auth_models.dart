@@ -8,6 +8,7 @@ class TokenResponseModel {
   final bool isNewUser;
   final String userId;
   final String? email;
+  final String? mobileNumber;
   final String role;
   final bool profileCompleted;
 
@@ -19,6 +20,7 @@ class TokenResponseModel {
     required this.isNewUser,
     required this.userId,
     this.email,
+    this.mobileNumber,
     required this.role,
     required this.profileCompleted,
   });
@@ -32,6 +34,7 @@ class TokenResponseModel {
       isNewUser: json['is_new_user'] as bool? ?? false,
       userId: json['user_id'] as String,
       email: json['email'] as String?,
+      mobileNumber: json['mobile_number'] as String?,
       role: json['role'] as String? ?? 'citizen',
       profileCompleted: json['profile_completed'] as bool? ?? false,
     );

@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 import '../../../../core/network/auth_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../home/presentation/screens/home_screen.dart';
@@ -32,6 +35,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   String _residenceType = 'rural';
   String? _selectedEducation;
   bool _isLoading = false;
+  bool _isDetectingLocation = false;
   String? _errorMessage;
 
   static const List<String> _indianStates = [
@@ -136,6 +140,155 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       setState(() {
         _dobController.text = '$yyyy-$mm-$dd';
       });
+    }
+  }
+
+  /// Request location permission and automatically fetch District and State via GPS
+  Future<void> _fetchDistrictFromLocation({bool triggeredByStateChange = false}) async {
+    if (_isDetectingLocation) return;
+    setState(() => _isDetectingLocation = true);
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted && !triggeredByStateChange) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please turn on location (GPS) on your phone to auto-detect district.'),
+              backgroundColor: AppTheme.saffronAccent,
+            ),
+          );
+        }
+        setState(() => _isDetectingLocation = false);
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted && !triggeredByStateChange) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Location permission denied. Please enter district manually.'),
+              ),
+            );
+          }
+          setState(() => _isDetectingLocation = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted && !triggeredByStateChange) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission permanently denied in settings. Please enter district manually.'),
+            ),
+          );
+        }
+        setState(() => _isDetectingLocation = false);
+        return;
+      }
+
+      // Fetch current device GPS coordinates
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+
+      String? detectedDistrict;
+      String? detectedState;
+
+      // 1. Primary reverse geocoding: OpenStreetMap Nominatim
+      try {
+        final url = Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.latitude}&lon=${position.longitude}&zoom=10&addressdetails=1',
+        );
+        final response = await http.get(
+          url,
+          headers: {'User-Agent': 'JanMitraAssist/1.0 (support@janmitra.gov.in)'},
+        ).timeout(const Duration(seconds: 6));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final address = data['address'] as Map<String, dynamic>?;
+          if (address != null) {
+            detectedDistrict = (address['state_district'] ??
+                    address['county'] ??
+                    address['district'] ??
+                    address['city'] ??
+                    address['town'] ??
+                    address['municipality'])
+                ?.toString();
+            detectedState = address['state']?.toString();
+          }
+        }
+      } catch (_) {}
+
+      // 2. Fallback reverse geocoding: BigDataCloud free client API
+      if (detectedDistrict == null || detectedDistrict.isEmpty) {
+        try {
+          final fallbackUrl = Uri.parse(
+            'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.latitude}&longitude=${position.longitude}&localityLanguage=en',
+          );
+          final response = await http.get(fallbackUrl).timeout(const Duration(seconds: 6));
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
+            detectedDistrict = (data['locality'] ?? data['city'] ?? data['principalSubdivision'])?.toString();
+            detectedState ??= data['principalSubdivision']?.toString();
+          }
+        } catch (_) {}
+      }
+
+      if (detectedDistrict != null && detectedDistrict.isNotEmpty) {
+        final cleanDistrict = detectedDistrict
+            .replaceAll(RegExp(r'\s+District', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\s+Division', caseSensitive: false), '')
+            .trim();
+
+        if (mounted) {
+          setState(() {
+            _districtController.text = cleanDistrict;
+            if (detectedState != null && detectedState.isNotEmpty) {
+              final match = _indianStates.firstWhere(
+                (s) => s.toLowerCase() == detectedState!.toLowerCase(),
+                orElse: () => '',
+              );
+              if (match.isNotEmpty) {
+                _selectedState = match;
+              }
+            }
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('📍 District auto-detected: $cleanDistrict${detectedState != null ? ", $detectedState" : ""}'),
+              backgroundColor: AppTheme.accentGreen,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (mounted && !triggeredByStateChange) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not determine district from GPS. Please type it in.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted && !triggeredByStateChange) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Location error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDetectingLocation = false);
+      }
     }
   }
 
@@ -311,20 +464,70 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     onChanged: (val) {
                       if (val != null) {
                         setState(() => _selectedState = val);
+                        // Trigger location permission & auto-detect district as requested
+                        _fetchDistrictFromLocation(triggeredByStateChange: true);
                       }
                     },
                   ),
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _districtController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'District *',
                       hintText: 'e.g. Pune, Nagpur, Jaipur',
-                      prefixIcon: Icon(Icons.location_city_outlined),
+                      prefixIcon: const Icon(Icons.location_city_outlined),
+                      suffixIcon: _isDetectingLocation
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Padding(
+                                padding: EdgeInsets.all(12),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.primaryBlue,
+                                ),
+                              ),
+                            )
+                          : IconButton(
+                              icon: const Icon(
+                                Icons.my_location,
+                                color: AppTheme.primaryBlue,
+                              ),
+                              tooltip:
+                                  'Auto-detect District via Location (स्थान से स्वतः भरें)',
+                              onPressed: () => _fetchDistrictFromLocation(),
+                            ),
                     ),
                     validator: (val) => val == null || val.trim().isEmpty
                         ? 'District is required'
                         : null,
+                  ),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.my_location,
+                          size: 14, color: AppTheme.primaryBlue),
+                      label: Text(
+                        _isDetectingLocation
+                            ? 'Detecting location via GPS...'
+                            : '📍 Auto-detect District via GPS (स्थान से स्वतः भरें)',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryBlue,
+                        ),
+                      ),
+                      onPressed: _isDetectingLocation
+                          ? null
+                          : () => _fetchDistrictFromLocation(),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   const Text(

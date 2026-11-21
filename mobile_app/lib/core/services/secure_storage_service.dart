@@ -76,7 +76,14 @@ class SecureStorageService {
       await _safeWrite(_keyUserId, userId);
     }
     if (mobileNumber != null) {
-      await _safeWrite(_keyMobileNumber, mobileNumber);
+      final digits = mobileNumber.replaceAll(RegExp(r'\D'), '');
+      if (digits.length >= 10) {
+        await _safeWrite(_keyMobileNumber, mobileNumber);
+      } else {
+        await _safeDelete(_keyMobileNumber);
+      }
+    } else {
+      await _safeDelete(_keyMobileNumber);
     }
     if (role != null) {
       await _safeWrite(_keyUserRole, role);

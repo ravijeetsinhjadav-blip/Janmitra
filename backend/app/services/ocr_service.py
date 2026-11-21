@@ -33,7 +33,8 @@ DOCUMENT_RULES: Dict[str, Dict[str, Any]] = {
         "keywords": [
             "income", "annual income", "tahsildar", "tehsildar", "revenue", "salary",
             "family income", "वार्षिक आय", "आय प्रमाण", "सक्षम प्राधिकारी", "राजस्व", "parivar",
-            "certificate of income", "gross income", "certificate no", "digitally signed"
+            "certificate of income", "gross income", "certificate no", "digitally signed",
+            "mamlatdar", "taluka", "દાખલો", "આવક", "આવકનો દાખલો", "મામલતદાર"
         ],
         "patterns": [r"\b(?:rs\.?|inr|₹)\s*[\d,]+", r"inc[/-]\d+", r"\bincome\b"],
     },
@@ -41,43 +42,57 @@ DOCUMENT_RULES: Dict[str, Dict[str, Any]] = {
         "title": "Caste Certificate (जाति प्रमाण पत्र)",
         "keywords": [
             "caste", "community", "scheduled caste", "scheduled tribe", "backward class",
-            "obc", "sc", "st", "sub-caste", "जाति", "अनुसूचित जाति", "अनुसूचित जनजाति",
-            "पिछड़ा वर्ग", "प्रमाण पत्र", "magistrate", "tahsildar", "collector"
+            "obc", "sc", "st", "sebc", "sub-caste", "जाति", "अनुसूचित जाति", "अनुसूचित जनजाति",
+            "पिछड़ा वर्ग", "प्रमाण पत्र", "magistrate", "tahsildar", "collector",
+            "સામાજિક", "જાતિ", "અનામત"
         ],
-        "patterns": [r"\b(?:sc|st|obc|caste|community)\b", r"cst[/-]\d+"],
+        "patterns": [r"\b(?:sc|st|obc|sebc|caste|community)\b", r"cst[/-]\d+"],
     },
     "domicile_certificate": {
         "title": "Domicile / Resident Certificate (निवास प्रमाण पत्र)",
         "keywords": [
             "domicile", "resident", "residence", "bonafide", "permanent resident",
             "native", "inhabitant", "निवास", "मूल निवास", "स्थानीय निवासी", "अधिवास",
-            "प्रमाण पत्र", "revenue inspector", "district magistrate"
+            "प्रमाण पत्र", "revenue inspector", "district magistrate", "રહેઠાણ", "રહેવાસી"
         ],
-        "patterns": [r"\b(?:domicile|resident|residence)\b", r"dom[/-]\d+"],
+        "patterns": [r"\b(?:domicile|resident|residence|bonafide)\b", r"dom[/-]\d+"],
     },
     "ration_card": {
         "title": "Ration Card (राशन कार्ड)",
         "keywords": [
             "ration", "food", "civil supplies", "consumer affairs", "nfsa", "fair price",
             "fps", "priority household", "bpl", "apl", "antyodaya", "राशन", "खाद्य",
-            "आपूर्ति", "खाद्यान्न", "beneficiaries", "head of family"
+            "आपूर्ति", "खाद्यान्न", "beneficiaries", "head of family", "રેશન", "રેશનકાર્ડ", "અન્ન"
         ],
-        "patterns": [r"\b(?:ration|nfsa|bpl|fps)\b", r"rc[-/]?\d+"],
+        "patterns": [r"\b(?:ration|nfsa|bpl|fps|phh)\b", r"rc[-/]?\d+"],
     },
     "aadhaar_card": {
         "title": "Aadhaar Card (आधार कार्ड)",
         "keywords": [
-            "aadhaar", "aadhar", "uidai", "unique identification", "government of india",
-            "आधार", "मेरा आधार", "भारत सरकार", "vid", "enrollment"
+            "aadhaar", "aadhar", "adharn", "adhaar", "uidai", "unique identification", "government of india",
+            "govt of india", "authority of india", "आधार", "मेरा आधार", "मेरी पहचान", "भारत सरकार",
+            "भारतीय विशिष्ट पहचान प्राधिकरण", "વિશિષ્ટ ઓળખ", "ભારત સરકાર", "મારું આધાર", "આધાર",
+            "vid", "enrollment", "enrolment", "male", "female", "transgender", "पुरुष", "महिला",
+            "પુરુષ", "સ્ત્રી", "dob", "date of birth", "year of birth", "yob", "जन्म तारीख", "जन्म तिथि",
+            "जन्म वर्ष", "janm", "father", "husband", "mother", "c/o", "s/o", "w/o", "d/o", "care of",
+            "son of", "wife of", "daughter of", "address", "pata", "सरनामું", "resident", "निवासी",
+            "help@uidai.gov.in", "1947", "myaadhaar", "uidai.gov.in"
         ],
-        "patterns": [r"\b\d{4}\s*\d{4}\s*\d{4}\b", r"xxxx\s*xxxx\s*\d{4}"],
+        "patterns": [
+            r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b",
+            r"[xX*•]{4}[\s\-]?[xX*•]{4}[\s\-]?\d{4}",
+            r"\b\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\b",
+            r"\b\d{4}/\d{5}/\d{5}\b",
+            r"(?:dob|yob|birth|janm)[\s:\-]*\d{2,4}",
+            r"\b(?:male|female|transgender|purush|mahila)\b",
+        ],
     },
     "voter_id": {
         "title": "Voter ID (मतदाता पहचान पत्र)",
         "keywords": [
             "election commission", "elector", "voter", "epic", "identity card",
             "assembly constituency", "parliamentary", "निर्वाचन", "मतदाता", "पहचान पत्र",
-            "bharat nirvachan"
+            "bharat nirvachan", "electoral registration officer", "elector's name"
         ],
         "patterns": [r"[a-z]{3}\d{7}", r"\bepic\b"],
     },
@@ -86,23 +101,24 @@ DOCUMENT_RULES: Dict[str, Dict[str, Any]] = {
         "keywords": [
             "land", "revenue", "record of rights", "7/12", "satbara", "khasra", "khatauni",
             "jamabandi", "survey", "hectare", "gat", "भूलेख", "खसरा", "खतौनी", "जमाबंदी",
-            "khatedar", "jirayat"
+            "khatedar", "jirayat", "૭/૧૨", "સાતબારા", "જમીન"
         ],
-        "patterns": [r"\b(?:7/12|khasra|khatauni|survey)\b"],
+        "patterns": [r"\b(?:7/12|khasra|khatauni|survey|satbara)\b"],
     },
     "bank_passbook": {
         "title": "Bank Passbook / Statement (बैंक पासबुक)",
         "keywords": [
             "bank", "account", "ifsc", "branch", "savings", "passbook", "statement",
-            "micr", "balance", "बैंक", "खाता", "आईएफएससी", "customer id", "branch manager"
+            "micr", "balance", "बैंक", "खाता", "आईएफएससी", "customer id", "branch manager",
+            "બેંક", "ખાતા"
         ],
         "patterns": [r"\b[A-Z]{4}0[A-Z0-9]{6}\b", r"\b(?:account|acct|a/c)\s*no\b"],
     },
     "pan_card": {
         "title": "PAN Card (पैन कार्ड)",
         "keywords": [
-            "income tax", "permanent account number", "pan card", "आयकर विभाग", "भारत सरकार",
-            "incometax"
+            "income tax", "permanent account number", "pan card", "pan", "आयकर विभाग", "भारत सरकार",
+            "incometax", "govt of india", "father's name", "date of birth", "signature"
         ],
         "patterns": [r"[a-z]{5}\d{4}[a-z]"],
     },
@@ -110,7 +126,7 @@ DOCUMENT_RULES: Dict[str, Dict[str, Any]] = {
         "title": "Official Document (शासकीय दस्तावेज़)",
         "keywords": [
             "government", "certificate", "authority", "department", "official", "verified",
-            "office", "state", "india", "board", "corporation", "ministry", "प्रमाण पत्र"
+            "office", "state", "india", "board", "corporation", "ministry", "प्रमाण पत्र", "દાખલો"
         ],
         "patterns": [],
     },
@@ -167,20 +183,46 @@ def validate_document_content(extracted_text: str, document_type: str) -> Tuple[
 
 
 def extract_text_with_rapidocr(file_bytes: bytes) -> Tuple[str, float]:
-    """Extract real text and confidence using local RapidOCR engine."""
+    """Extract real text and confidence using local RapidOCR engine with auto-orientation and downscaling."""
     try:
         from rapidocr_onnxruntime import RapidOCR
-        from PIL import Image
+        from PIL import Image, ImageOps, ImageEnhance
         import numpy as np
 
         img = Image.open(io.BytesIO(file_bytes))
+
+        # Auto-orient using EXIF metadata (essential for phone camera photos)
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            pass
+
         if img.mode != "RGB":
             img = img.convert("RGB")
+
+        # Downscale large images (> 1800px) to prevent memory overload and speed up recognition
+        max_dim = max(img.size)
+        if max_dim > 1800:
+            scale = 1800 / max_dim
+            new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+
         img_np = np.array(img)
         engine = RapidOCR()
         results, _ = engine(img_np)
+
+        # If no text detected on raw camera image, try with contrast enhancement
+        if not results:
+            try:
+                enhancer = ImageEnhance.Contrast(img)
+                enhanced_np = np.array(enhancer.enhance(1.4))
+                results, _ = engine(enhanced_np)
+            except Exception:
+                pass
+
         if not results:
             return "", 0.0
+
         lines = [item[1] for item in results if item and len(item) > 1 and item[1].strip()]
         confidences = [float(item[2]) for item in results if item and len(item) > 2]
         avg_conf = (sum(confidences) / len(confidences)) if confidences else 0.85
@@ -728,22 +770,49 @@ class MockOCRAdapter(BaseOCRAdapter):
         if real_text and len(real_text.strip()) >= 10:
             is_valid, validation_msg = validate_document_content(real_text, norm_type)
             if not is_valid:
-                logger.warning(
-                    "Uploaded file '%s' rejected: content does not match document_type '%s' (%s)",
-                    filename, norm_type, validation_msg
+                # If content explicitly matches a DIFFERENT document type (e.g. Ration Card uploaded for Income Cert):
+                is_mismatch = (
+                    "appears to be" in validation_msg
+                    or ("does not match" in validation_msg and "Detected content" in validation_msg)
+                )
+                if is_mismatch:
+                    logger.warning(
+                        "Uploaded file '%s' rejected: content belongs to another document type (%s)",
+                        filename, validation_msg
+                    )
+                    return OCRResult(
+                        extracted_text="",
+                        confidence=real_conf,
+                        metadata={
+                            "provider": "rapidocr",
+                            "is_mock": False,
+                            "validation_failure": True,
+                            "detected_chars": len(real_text),
+                        },
+                        status=DocumentProcessingStatus.OCR_FAILED,
+                        manual_review_required=True,
+                        error_message=validation_msg,
+                        completed_at=now,
+                    )
+
+                # If text was detected from a genuine card/document, but lighting or camera angle caused some keywords to be partial:
+                # Do NOT reject the citizen's document! Store securely in vault with MANUAL_REVIEW_REQUIRED!
+                logger.info(
+                    "Uploaded file '%s' contains readable text but missed strict keyword threshold. Accepted for manual review.",
+                    filename
                 )
                 return OCRResult(
-                    extracted_text="",
-                    confidence=real_conf,
+                    extracted_text=real_text,
+                    confidence=max(real_conf, 0.65),
                     metadata={
                         "provider": "rapidocr",
                         "is_mock": False,
-                        "validation_failure": True,
+                        "advisory": "partial_keyword_match",
                         "detected_chars": len(real_text),
                     },
-                    status=DocumentProcessingStatus.OCR_FAILED,
+                    status=DocumentProcessingStatus.MANUAL_REVIEW_REQUIRED,
                     manual_review_required=True,
-                    error_message=validation_msg,
+                    error_message="Document accepted. Citizen details pending manual verification.",
                     completed_at=now,
                 )
 
@@ -869,15 +938,12 @@ class OCRService:
         # 1. Production Mode Constraints
         if self.is_production():
             if not self._should_use_gcv():
-                logger.error("Production OCR error: Cloud Vision credentials not configured.")
-                return OCRResult(
-                    extracted_text="",
-                    confidence=0.0,
-                    metadata={"provider": "google_cloud_vision", "is_mock": False, "error": "credentials_not_configured"},
-                    status=DocumentProcessingStatus.OCR_FAILED,
-                    manual_review_required=True,
-                    error_message="OCR processing service unavailable in production: Cloud Vision credentials not configured.",
-                    completed_at=now,
+                logger.info("Cloud Vision credentials not configured; utilizing local RapidOCR engine.")
+                return self._mock_adapter.extract_text(
+                    file_bytes=file_bytes,
+                    mime_type=mime_type,
+                    document_type=document_type,
+                    filename=filename,
                 )
 
             logger.info("Processing document '%s' via Google Cloud Vision API in production", filename)

@@ -106,16 +106,23 @@ def generate_secure_random_token(nbytes: int = 32) -> str:
     return secrets.token_urlsafe(nbytes)
 
 
-def normalize_mobile_number(mobile: str) -> str:
-    """Normalize mobile number to standard 10-digit Indian format or clean international format."""
-    cleaned = "".join(ch for ch in mobile if ch.isdigit() or ch == "+")
-    if len(cleaned) == 10 and cleaned.isdigit():
-        return f"+91{cleaned}"
-    if cleaned.startswith("0") and len(cleaned) == 11:
-        return f"+91{cleaned[1:]}"
-    if not cleaned.startswith("+"):
-        return f"+{cleaned}"
-    return cleaned
+def normalize_mobile_number(mobile: Optional[str]) -> Optional[str]:
+    """Normalize mobile number to standard 10-digit Indian format or clean international format.
+    
+    Returns None if no valid mobile digits are provided, avoiding stray '+' or invalid values.
+    """
+    if not mobile:
+        return None
+    digits = "".join(ch for ch in mobile if ch.isdigit())
+    if not digits or len(digits) < 10:
+        return None
+    if len(digits) == 10:
+        return f"+91{digits}"
+    if len(digits) == 12 and digits.startswith("91"):
+        return f"+{digits}"
+    if len(digits) == 11 and digits.startswith("0"):
+        return f"+91{digits[1:]}"
+    return f"+{digits}"
 
 
 def create_access_token(

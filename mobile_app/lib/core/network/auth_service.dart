@@ -49,7 +49,7 @@ class AuthService {
           accessToken: tokenResponse.accessToken,
           refreshToken: tokenResponse.refreshToken,
           userId: tokenResponse.userId,
-          mobileNumber: tokenResponse.email ?? email,
+          mobileNumber: tokenResponse.mobileNumber,
           role: tokenResponse.role,
           profileCompleted: tokenResponse.profileCompleted,
         );
@@ -97,7 +97,10 @@ class AuthService {
           accessToken: tokenResponse.accessToken,
           refreshToken: tokenResponse.refreshToken,
           userId: tokenResponse.userId,
-          mobileNumber: tokenResponse.email ?? email,
+          mobileNumber: tokenResponse.mobileNumber ??
+              (mobileNumber != null && mobileNumber.trim().isNotEmpty
+                  ? mobileNumber.trim()
+                  : null),
           role: tokenResponse.role,
           profileCompleted: tokenResponse.profileCompleted,
         );
@@ -139,7 +142,7 @@ class AuthService {
           accessToken: tokenResponse.accessToken,
           refreshToken: tokenResponse.refreshToken,
           userId: tokenResponse.userId,
-          mobileNumber: tokenResponse.email ?? email,
+          mobileNumber: tokenResponse.mobileNumber,
           role: tokenResponse.role,
           profileCompleted: tokenResponse.profileCompleted,
         );

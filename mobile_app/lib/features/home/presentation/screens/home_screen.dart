@@ -42,22 +42,45 @@ class _HomeScreenState extends State<HomeScreen> {
     final mobile = await _storage.getMobileNumber();
     final role = await _storage.getUserRole();
     try {
+      final user = await _authService.getCurrentUser();
       final profile = await _authService.getUserProfile();
       if (mounted) {
         setState(() {
-          _mobileNumber = mobile;
+          _mobileNumber = user.mobileNumber ?? mobile;
           _role = (role ?? 'citizen').toUpperCase();
           _profile = profile;
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _mobileNumber = mobile;
-          _role = (role ?? 'citizen').toUpperCase();
-        });
+      try {
+        final profile = await _authService.getUserProfile();
+        if (mounted) {
+          setState(() {
+            _mobileNumber = mobile;
+            _role = (role ?? 'citizen').toUpperCase();
+            _profile = profile;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _mobileNumber = mobile;
+            _role = (role ?? 'citizen').toUpperCase();
+          });
+        }
       }
     }
+  }
+
+  String _getDisplayPhoneNumber() {
+    if (_mobileNumber != null && _mobileNumber!.trim().isNotEmpty) {
+      final digits = _mobileNumber!.replaceAll(RegExp(r'\D'), '');
+      if (digits.length >= 10) {
+        final last10 = digits.substring(digits.length - 10);
+        return '+91 $last10';
+      }
+    }
+    return 'Verified Citizen';
   }
 
   Future<void> _handleSignOut() async {
@@ -247,11 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      _mobileNumber != null
-                          ? (_mobileNumber!.startsWith('+')
-                              ? _mobileNumber!
-                              : '+91 $_mobileNumber')
-                          : 'Aadhaar Mobile Linked',
+                      _getDisplayPhoneNumber(),
                       style: TextStyle(
                         fontSize: 12.5,
                         color: Colors.white.withAlpha(200),

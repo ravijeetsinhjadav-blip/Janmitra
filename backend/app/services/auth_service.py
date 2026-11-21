@@ -217,6 +217,7 @@ class AuthService:
             is_new_user=is_new_user,
             user_id=str(user.id),
             email=user.email,
+            mobile_number=user.mobile_number,
             role=user.role,
             profile_completed=profile_completed,
         )
@@ -289,6 +290,7 @@ class AuthService:
             is_new_user=False,
             user_id=str(user.id),
             email=user.email,
+            mobile_number=user.mobile_number,
             role=user.role,
             profile_completed=profile_completed,
         )
